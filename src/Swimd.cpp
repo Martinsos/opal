@@ -2,7 +2,6 @@
 
 using namespace std;
 
-// TODO: inspect behaviour with null sequences, I did not pay enough attention to that
 vector<short> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, int dbLength, int dbSeqLengths[],
 				    int gapOpen, int gapExt, short ** scoreMatrix, int alphabetLength) {
     vector<short> bestScores(dbLength); // result
@@ -46,7 +45,7 @@ vector<short> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, i
 	uF = uH = ulH = _mm_set1_epi16(0); // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
 	
 	// Calculate query profile (alphabet x dbQueryLetter)
-	// TODO: is it ok to leave values of NULL sequences undefined?
+	// TODO: Rognes uses pshufb here, I don't know how/why?
 	__m128i P[alphabetLength];
 	short profileRow[NUM_SEQS] __attribute__((aligned(16)));
 	for (Byte letter = 0; letter < alphabetLength; letter++) {
@@ -70,7 +69,7 @@ vector<short> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, i
 	    __m128i H = _mm_set1_epi16(0);
     	    H = _mm_max_epi16(H, E);
 	    H = _mm_max_epi16(H, F);
-	    H = _mm_max_epi16(H, _mm_adds_epi16(ulH, P[query[r]])); // TODO: check for overflow here (but we don't want to use IF)
+	    H = _mm_max_epi16(H, _mm_adds_epi16(ulH, P[query[r]])); // TODO: check for overflow (here or outside the loop? We dont want to use IF in loop)
 
 	    maxH = _mm_max_epi16(maxH, H); // update best score
 
@@ -88,7 +87,7 @@ vector<short> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, i
 	columnsSinceLastSeqEnd++;
 	if (shortestDbSeqLength == columnsSinceLastSeqEnd) { // If at least one sequence ended
 	    shortestDbSeqLength = -1;
-	    short* unpackedMaxH = (short *)&maxH; // TODO: is this ok? Can I do it like this? Should I use store?
+	    short* unpackedMaxH = (short *)&maxH;
 	    short resetMask[NUM_SEQS] __attribute__((aligned(16)));
 
 	    for (int i = 0; i < NUM_SEQS; i++) {
@@ -103,7 +102,7 @@ vector<short> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, i
 					 currDbSeqsLengths[i], db, dbSeqLengths);
 			resetMask[i] = 0x0000; 
 		    } else {
-			resetMask[i] = 0xFFFF;  // TODO: is this ok?
+			resetMask[i] = 0xFFFF;  // TODO: can this be done nicer? explore this
 			if (currDbSeqsPos[i] != NULL)
 			    currDbSeqsPos[i]++; // If not new and not NULL, move for one element
 		    }

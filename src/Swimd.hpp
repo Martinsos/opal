@@ -6,10 +6,10 @@ extern "C" {
 
 using namespace std;
 
-typedef unsigned short Word;
-typedef unsigned char  Byte;
+typedef unsigned short Word; // TODO: name this ushort?
+typedef unsigned char  Byte; // TODO: name this uchar?
 
-#define NUM_SEQS 8 // Number of sequences that are calculated concurrently
+#define NUM_SEQS 8 // Number of sequences that are calculated concurrently -> this is when signed short is used
 
 /**
  * v1.0: 
@@ -23,10 +23,12 @@ typedef unsigned char  Byte;
  *       - use unsigned values to get bigger range (can that be done?)
  *       - use as less registers as possible! Investigate assembly code to determine how to do it.
  *       - check for overflow and use bigger precision in that case
+ *       - maybe pad columns so length%4 == 0, that way I can check for sequence ending only on every 4th column, not every column
  */
 class Swimd {
 public:
     /**
+     * Compares query sequence with each database sequence and returns similarity scores.
      * Sequences are not represented as arrays of letters, but as arrays of indices of letters in alphabet.
      * For example, if alphabet is {A,C,T,G} and sequence is ACCTCAG it will be represented as 0112103.
      * Opening of gap is penalized with gapOpen + gapExt, while gap extension is penalized with gapExt.
@@ -39,10 +41,10 @@ public:
      * @param gapExt
      * @param scoreMatrix Matrix of dimensions (alphabetLength, alphabetLength).
      * @param alphabetLength
-     * @return Best score for every database sequence.
+     * @return Largest similarity score for every database sequence.
      */
     static vector<short> searchDatabase(Byte query[], int queryLength, Byte ** db, int dbLength, int dbSeqLengths[],
-			      int gapOpen, int gapExt, short ** scoreMatrix, int alphabetLength);
+					int gapOpen, int gapExt, short ** scoreMatrix, int alphabetLength);
 
 private:
     static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, Byte * &currDbSeqPos, 
