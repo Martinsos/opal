@@ -69,7 +69,7 @@ vector<short> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, i
 	    __m128i H = _mm_set1_epi16(0);
     	    H = _mm_max_epi16(H, E);
 	    H = _mm_max_epi16(H, F);
-	    H = _mm_max_epi16(H, _mm_adds_epi16(ulH, P[query[r]])); // TODO: check for overflow (here or outside the loop? We dont want to use IF in loop)
+	    H = _mm_max_epi16(H, _mm_adds_epi16(ulH, P[query[r]])); // Saturation prevents overflow
 
 	    maxH = _mm_max_epi16(maxH, H); // update best score
 
@@ -83,11 +83,17 @@ vector<short> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, i
 	    prevHs[r] = H;
 	}
 
+	short* unpackedMaxH = (short *)&maxH;
+	
+	// Check if overflow happened. Since I use saturation, I check if max possible value is reached
+	for (int i = 0; i < NUM_SEQS; i++)
+	    if (unpackedMaxH[i] == UPPER_BOUND)
+		throw OVERFLOW_EXC;
+
 	// Check if any of sequences ended
 	columnsSinceLastSeqEnd++;
 	if (shortestDbSeqLength == columnsSinceLastSeqEnd) { // If at least one sequence ended
 	    shortestDbSeqLength = -1;
-	    short* unpackedMaxH = (short *)&maxH;
 	    short resetMask[NUM_SEQS] __attribute__((aligned(16)));
 
 	    for (int i = 0; i < NUM_SEQS; i++) {

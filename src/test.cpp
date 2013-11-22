@@ -55,14 +55,22 @@ int main() {
     */
 
     // Create score matrix
-    short ** scoreMatrix = createSimpleScoreMatrix(alphabetLength, 2, -1);
+    short ** scoreMatrix = createSimpleScoreMatrix(alphabetLength, 100, -1);
 
 	
     // Run Swimd
     printf("Starting Swimd!\n");
     start = clock();
-    vector<short> scores = Swimd::searchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
-						 gapOpen, gapExt, scoreMatrix, alphabetLength);
+    vector<short> scores;
+    try {
+	scores = Swimd::searchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
+				      gapOpen, gapExt, scoreMatrix, alphabetLength);
+    } catch (int e) {
+	if (e == OVERFLOW_EXC)
+	    printf("Overflow occured!");
+	exit(0);
+    }
+
     finish = clock();
     double time1 = ((double)(finish-start))/CLOCKS_PER_SEC;
     printf("Time: %lf\n", ((double)(finish-start))/CLOCKS_PER_SEC);

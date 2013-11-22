@@ -1,4 +1,5 @@
 #include <vector>
+#include <climits>
 
 extern "C" {
 #include <smmintrin.h>
@@ -9,7 +10,11 @@ using namespace std;
 typedef unsigned short Word; // TODO: name this ushort?
 typedef unsigned char  Byte; // TODO: name this uchar?
 
-#define NUM_SEQS 8 // Number of sequences that are calculated concurrently -> this is when signed short is used
+#define OVERFLOW_EXC 1
+
+// Macros for when using short
+#define NUM_SEQS 8 // Number of sequences that are calculated concurrently
+#define UPPER_BOUND SHRT_MAX
 
 /**
  * v1.0: 
@@ -41,7 +46,7 @@ public:
      * @param gapExt
      * @param scoreMatrix Matrix of dimensions (alphabetLength, alphabetLength).
      * @param alphabetLength
-     * @return Largest similarity score for every database sequence.
+     * @return Largest similarity score for every database sequence. Null if overflow happens.
      */
     static vector<short> searchDatabase(Byte query[], int queryLength, Byte ** db, int dbLength, int dbSeqLengths[],
 					int gapOpen, int gapExt, short ** scoreMatrix, int alphabetLength);
