@@ -6,9 +6,39 @@ extern "C" {
 
 using namespace std;
 
-vector<short> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, int dbLength, int dbSeqLengths[],
-				    int gapOpen, int gapExt, short ** scoreMatrix, int alphabetLength) {
-    vector<short> bestScores(dbLength); // result
+#define SCORE_T short // Score type
+#define UPPER_BOUND SHRT_MAX // Maximum value of score type
+#define ALL1 0xFFFF
+#define NUM_SEQS 8 // Number of sequences that are calculated concurrently
+#define _MM_SET1 _mm_set1_epi16 // Sets all fields to given number
+#define _MM_MAX _mm_max_epi16
+#define _MM_ADDS _mm_adds_epi16
+#define _MM_SUBS _mm_subs_epi16
+
+/*
+#define SCORE_T char // Score type
+#define UPPER_BOUND CHAR_MAX // Maximum value of score type
+#define ALL1 0xFF
+#define NUM_SEQS 16 // Number of sequences that are calculated concurrently
+#define _MM_SET1 _mm_set1_epi8 // Sets all fields to given number
+#define _MM_MAX _mm_max_epi8
+#define _MM_ADDS _mm_adds_epi8
+#define _MM_SUBS _mm_subs_epi8
+*/
+/*
+#define SCORE_T int // Score type
+#define UPPER_BOUND INT_MAX // Maximum value of score type
+#define ALL1 0xFFFFFFFF
+#define NUM_SEQS 4 // Number of sequences that are calculated concurrently
+#define _MM_SET1 _mm_set1_epi32 // Sets all fields to given number
+#define _MM_MAX _mm_max_epi32
+#define _MM_ADDS _mm_adds_epi32  // This does not exist :(
+#define _MM_SUBS _mm_subs_epi32  // This does not exist :(
+*/
+
+vector<int> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, int dbLength, int dbSeqLengths[],
+				  int gapOpen, int gapExt, short ** scoreMatrix, int alphabetLength) {
+    vector<int> bestScores(dbLength); // result
 
     int nextDbSeqIdx = 0; // index in db
     int currDbSeqsIdxs[NUM_SEQS]; // index in db
@@ -27,18 +57,18 @@ vector<short> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, i
 	}
 
     // Q is gap open penalty, R is gap ext penalty.
-    __m128i Q = _mm_set1_epi16(gapOpen+gapExt);
-    __m128i R = _mm_set1_epi16(gapExt);
+    __m128i Q = _MM_SET1(gapOpen+gapExt);
+    __m128i R = _MM_SET1(gapExt);
 
     // Previous H column (array), previous E column (array), previous F, all signed short
     __m128i prevHs[queryLength];
     __m128i prevEs[queryLength];
     // Initialize all values to 0
     for (int i = 0; i < queryLength; i++) {
-	prevHs[i] = prevEs[i] = _mm_set1_epi16(0);
+	prevHs[i] = prevEs[i] = _MM_SET1(0);
     }
 
-    __m128i maxH = _mm_set1_epi16(0);  // Best score in sequence
+    __m128i maxH = _MM_SET1(0);  // Best score in sequence
 
 
     int columnsSinceLastSeqEnd = 0;
@@ -46,36 +76,36 @@ vector<short> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, i
     while (numEndedDbSeqs < dbLength) {
 	// Previous cells: u - up, l - left, ul - up left
         __m128i uF, uH, ulH; 
-	uF = uH = ulH = _mm_set1_epi16(0); // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
+	uF = uH = ulH = _MM_SET1(0); // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
 	
 	// Calculate query profile (alphabet x dbQueryLetter)
 	// TODO: Rognes uses pshufb here, I don't know how/why?
 	__m128i P[alphabetLength];
-	short profileRow[NUM_SEQS] __attribute__((aligned(16)));
+	SCORE_T profileRow[NUM_SEQS] __attribute__((aligned(16)));
 	for (Byte letter = 0; letter < alphabetLength; letter++) {
 	    short* scoreMatrixRow = scoreMatrix[letter];
 	    for (int i = 0; i < NUM_SEQS; i++) {
 		Byte* dbSeqPos = currDbSeqsPos[i];
 		if (dbSeqPos != NULL)
-		    profileRow[i] = scoreMatrixRow[*dbSeqPos];
+		    profileRow[i] = (SCORE_T)scoreMatrixRow[*dbSeqPos];
 	    }
 	    P[letter] = _mm_load_si128((__m128i const*)profileRow);
 	}
 	
 	for (int r = 0; r < queryLength; r++) { // For each cell in column
 	    // Calculate E = max(lH-Q, lE-R)
-	    __m128i E = _mm_max_epi16( _mm_subs_epi16(prevHs[r], Q), _mm_subs_epi16(prevEs[r], R) );
+	    __m128i E = _MM_MAX(_MM_SUBS(prevHs[r], Q),_MM_SUBS(prevEs[r], R) );
 
 	    // Calculate F = max(uH-Q, uF-R)
-	    __m128i F = _mm_max_epi16( _mm_subs_epi16(uH, Q), _mm_subs_epi16(uF, R) );
+	    __m128i F = _MM_MAX(_MM_SUBS(uH, Q),_MM_SUBS(uF, R) );
 
 	    // Calculate H
-	    __m128i H = _mm_set1_epi16(0);
-    	    H = _mm_max_epi16(H, E);
-	    H = _mm_max_epi16(H, F);
-	    H = _mm_max_epi16(H, _mm_adds_epi16(ulH, P[query[r]])); // Saturation prevents overflow
+	    __m128i H = _MM_SET1(0);
+    	    H = _MM_MAX(H, E);
+	    H = _MM_MAX(H, F);
+	    H = _MM_MAX(H, _MM_ADDS(ulH, P[query[r]])); // Saturation prevents overflow
 
-	    maxH = _mm_max_epi16(maxH, H); // update best score
+	    maxH = _MM_MAX(maxH, H); // update best score
 
 	    // Set uF, uH, ulH
 	    uF = F;
@@ -87,7 +117,7 @@ vector<short> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, i
 	    prevHs[r] = H;
 	}
 
-	short* unpackedMaxH = (short *)&maxH;
+	SCORE_T* unpackedMaxH = (SCORE_T *)&maxH;
 	
 	// Check if overflow happened. Since I use saturation, I check if max possible value is reached
 	for (int i = 0; i < NUM_SEQS; i++)
@@ -98,7 +128,7 @@ vector<short> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, i
 	columnsSinceLastSeqEnd++;
 	if (shortestDbSeqLength == columnsSinceLastSeqEnd) { // If at least one sequence ended
 	    shortestDbSeqLength = -1;
-	    short resetMask[NUM_SEQS] __attribute__((aligned(16)));
+	    SCORE_T resetMask[NUM_SEQS] __attribute__((aligned(16)));
 
 	    for (int i = 0; i < NUM_SEQS; i++) {
 		if (currDbSeqsPos[i] != NULL) { // If not null sequence
@@ -110,9 +140,9 @@ vector<short> Swimd::searchDatabase(Byte query[], int queryLength, Byte ** db, i
 			// Load next sequence
 			loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
 					 currDbSeqsLengths[i], db, dbSeqLengths);
-			resetMask[i] = 0x0000; 
+			resetMask[i] = 0; 
 		    } else {
-			resetMask[i] = 0xFFFF;  // TODO: can this be done nicer? explore this
+			resetMask[i] = ALL1;  // TODO: can this be done nicer? explore this
 			if (currDbSeqsPos[i] != NULL)
 			    currDbSeqsPos[i]++; // If not new and not NULL, move for one element
 		    }

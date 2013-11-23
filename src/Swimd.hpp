@@ -10,10 +10,6 @@ typedef unsigned char  Byte; // TODO: name this uchar?
 
 #define OVERFLOW_EXC 1
 
-// Macros for when using short
-#define NUM_SEQS 8 // Number of sequences that are calculated concurrently
-#define UPPER_BOUND SHRT_MAX
-
 /**
  * v1.0: 
  *  - working with signed 16 bit values (short)
@@ -46,8 +42,8 @@ public:
      * @param alphabetLength
      * @return Largest similarity score for every database sequence. Null if overflow happens.
      */
-    static vector<short> searchDatabase(Byte query[], int queryLength, Byte ** db, int dbLength, int dbSeqLengths[],
-					int gapOpen, int gapExt, short ** scoreMatrix, int alphabetLength);
+    static vector<int> searchDatabase(Byte query[], int queryLength, Byte ** db, int dbLength, int dbSeqLengths[],
+				      int gapOpen, int gapExt, short ** scoreMatrix, int alphabetLength);
 
 private:
     static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, Byte * &currDbSeqPos, 
