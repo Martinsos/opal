@@ -55,7 +55,7 @@ int main() {
     */
 
     // Create score matrix
-    short ** scoreMatrix = createSimpleScoreMatrix(alphabetLength, 100, -1);
+    short ** scoreMatrix = createSimpleScoreMatrix(alphabetLength, 2, -1);
 
 	
     // Run Swimd

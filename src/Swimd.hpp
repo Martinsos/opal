@@ -1,13 +1,11 @@
+#ifndef SWIMD_HPP
+#define SWIMD_HPP
+
 #include <vector>
 #include <climits>
 
-extern "C" {
-#include <smmintrin.h>
-}
-
 using namespace std;
 
-typedef unsigned short Word; // TODO: name this ushort?
 typedef unsigned char  Byte; // TODO: name this uchar?
 
 #define OVERFLOW_EXC 1
@@ -55,3 +53,5 @@ private:
     static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, Byte * &currDbSeqPos, 
 				 int &currDbSeqLength, Byte ** db, int dbSeqLengths[]);
 };
+
+#endif /* SWIMD_HPP */

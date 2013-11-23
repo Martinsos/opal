@@ -1,3 +1,7 @@
+extern "C" {
+#include <smmintrin.h>
+}
+
 #include "Swimd.hpp"
 
 using namespace std;
