@@ -10,11 +10,12 @@
 using namespace std;
 
 void fillRandomly(Byte* seq, int seqLength, int alphabetLength);
-short ** createSimpleScoreMatrix(int alphabetLength, short match, short mismatch);
-void deleteScoreMatrix(short ** scoreMatrix, int alphabetLength);
+int ** createSimpleScoreMatrix(int alphabetLength, int match, int mismatch);
+void deleteScoreMatrix(int ** scoreMatrix, int alphabetLength);
 vector<int> calculateSW(Byte query[], int queryLength, Byte ** db, int dbLength, int dbSeqLengths[],
-			int gapOpen, int gapExt, short ** scoreMatrix, int alphabetLength);
+			int gapOpen, int gapExt, int ** scoreMatrix, int alphabetLength);
 void printInts(vector<int> v);
+template <class T> T maximum(vector<T> v);
 
 int main() {
     clock_t start, finish;
@@ -55,7 +56,7 @@ int main() {
     */
 
     // Create score matrix
-    short ** scoreMatrix = createSimpleScoreMatrix(alphabetLength, 2, -1);
+    int ** scoreMatrix = createSimpleScoreMatrix(alphabetLength, 3, -1);
 
 	
     // Run Swimd
@@ -65,12 +66,10 @@ int main() {
     try {
 	scores = Swimd::searchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
 				       gapOpen, gapExt, scoreMatrix, alphabetLength);
-    } catch (int e) {
-	if (e == OVERFLOW_EXC)
-	    printf("Overflow occured!");
+    } catch (Swimd::DatabaseSearchOverflowException e) {
+	printf("%s\n", e.what());
 	exit(0);
     }
-
     finish = clock();
     double time1 = ((double)(finish-start))/CLOCKS_PER_SEC;
     printf("Time: %lf\n", ((double)(finish-start))/CLOCKS_PER_SEC);
@@ -78,7 +77,8 @@ int main() {
     // Print result
     printf("Result: ");
     printInts(scores);
-	  
+    printf("Maximum: %d\n", maximum<int>(scores));	  
+
     // Run normal SW
     printf("Starting normal SW!\n");
     start = clock();
@@ -91,6 +91,7 @@ int main() {
     // Print result
     printf("Result: ");
     printInts(scores2);
+    printf("Maximum: %d\n", maximum<int>(scores2));
 	
     // Print differences in results (hopefully there are none!)
     printf("Diff: ");
@@ -114,24 +115,24 @@ void fillRandomly(Byte* seq, int seqLength, int alphabetLength) {
 	seq[i] = rand() % 4;
 }
 
-short ** createSimpleScoreMatrix(int alphabetLength, short match, short mismatch) {
-    short ** scoreMatrix = new short*[alphabetLength];
+int ** createSimpleScoreMatrix(int alphabetLength, int match, int mismatch) {
+    int ** scoreMatrix = new int*[alphabetLength];
     for (int i = 0; i < alphabetLength; i++) {
-	scoreMatrix[i] = new short[alphabetLength];
+	scoreMatrix[i] = new int[alphabetLength];
 	for (int j = 0; j < alphabetLength; j++)
 	    scoreMatrix[i][j] = (i==j ? match : mismatch);
     }
     return scoreMatrix;
 }
 
-void deleteScoreMatrix(short ** scoreMatrix, int alphabetLength) {
+void deleteScoreMatrix(int ** scoreMatrix, int alphabetLength) {
     for (int i = 0; i < alphabetLength; i++)
 	delete[] scoreMatrix[i];
     delete[] scoreMatrix;
 }
 
 vector<int> calculateSW(Byte query[], int queryLength, Byte ** db, int dbLength, int dbSeqLengths[],
-			int gapOpen, int gapExt, short ** scoreMatrix, int alphabetLength) {
+			int gapOpen, int gapExt, int ** scoreMatrix, int alphabetLength) {
     vector<int> bestScores(dbLength); // result
     
     int prevHs[queryLength];
@@ -149,8 +150,8 @@ vector<int> calculateSW(Byte query[], int queryLength, Byte ** db, int dbLength,
 	    uF = uH = ulH = 0;
 
 	    for (int r = 0; r < queryLength; r++) {
-		int E = max(prevHs[r] - (gapOpen + gapExt), prevEs[r] - gapExt);
-		int F = max(uH - (gapOpen + gapExt), uF - gapExt);
+		int E = max(prevHs[r] - gapOpen, prevEs[r] - gapExt);
+		int F = max(uH - gapOpen, uF - gapExt);
 		int score = scoreMatrix[query[r]][db[seqIdx][c]];
 		int H = max(0, max(E, max(F, ulH+score)));
 		maxH = max(H, maxH);
@@ -173,4 +174,12 @@ void printInts(vector<int> v) {
     for (int i = 0; i < v.size(); i++)
 	printf("%d ", v[i]);
     printf("\n");
+}
+
+template <class T> T maximum(vector<T> v) {
+    T maximum = 0;
+    for (int i = 0; i < v.size(); i++)
+	if (v[i] > maximum)
+	    maximum = v[i];
+    return maximum;
 }
