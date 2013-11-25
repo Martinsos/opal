@@ -100,12 +100,17 @@ inline bool Swimd::loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDb
  */
 class Swimd::DatabaseSearchOverflowException : public exception {
 public:
-    DatabaseSearchOverflowException() {}
+    DatabaseSearchOverflowException(const char* msg = "Overflow detected in database search") {
+	this->msg = msg;
+    }
     ~DatabaseSearchOverflowException() throw() {};
 
     const char* what() {
-	return "Overflow in database search";
+	return this->msg;
     }	
+
+private:
+    const char* msg;
 };
 
 

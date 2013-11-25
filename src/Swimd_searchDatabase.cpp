@@ -68,7 +68,7 @@ SEARCH_DATABASE_DEFINITION(PRECISION) {
     // These extra limits are enforced so overflow could be detected more efficiently
     if (gapOpen <= LOWER_BOUND/2 || UPPER_BOUND/2 <= gapOpen
 	|| gapExt <= LOWER_BOUND/2 || UPPER_BOUND/2 <= gapExt) {
-	throw invalid_argument("Gap penalty is too big");
+	throw DatabaseSearchOverflowException("Gap penalty is too big");
     }
 #endif
     for (int r = 0; r < alphabetLength; r++)
@@ -79,7 +79,7 @@ SEARCH_DATABASE_DEFINITION(PRECISION) {
 	    }
 #ifndef SAT_ARTHM
 	    if (score <= LOWER_BOUND/2 || UPPER_BOUND/2 <= score)
-		throw invalid_argument("Score matrix has too big value(s)");
+		throw DatabaseSearchOverflowException("Score matrix has too big value(s)");
 #endif
 	}	
     // ------------------------------------------------------------------ //
