@@ -18,9 +18,11 @@ using namespace std;
 #define _MM_SET1 _mm_set1_epi8 // Sets all fields to given number
 #define _MM_MAX _mm_max_epi8
 #define _MM_MIN _mm_min_epi8
+ // ------ SATURATION ARITHMETIC ------- //
+#define SAT_ARTHM // Defined when saturation arithmetic is being used
 #define _MM_ADD _mm_adds_epi8 // Saturation arithmetic used here!
 #define _MM_SUB _mm_subs_epi8 // Saturation
-#define SAT_ARTHM // Defined when saturation arithmetic is being used
+ // ------------------------------------ //
 #endif
 
 #ifdef SSE_16
@@ -33,9 +35,11 @@ using namespace std;
 #define _MM_SET1 _mm_set1_epi16
 #define _MM_MAX _mm_max_epi16
 #define _MM_MIN _mm_min_epi16
+ // ------ SATURATION ARITHMETIC ------- //
+#define SAT_ARTHM
 #define _MM_ADD _mm_adds_epi16 // Saturation
 #define _MM_SUB _mm_subs_epi16 // Saturation
-#define SAT_ARTHM
+ // ------------------------------------ //
 #endif
 
 #ifdef SSE_32
