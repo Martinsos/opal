@@ -66,31 +66,32 @@ SEARCH_DATABASE_DEFINITION(PRECISION) {
     // Check if Q, R or scoreMatrix have values too big for used score type
     if (gapOpen < LOWER_BOUND || UPPER_BOUND < gapOpen
 	|| gapExt < LOWER_BOUND || UPPER_BOUND < gapExt) {
-	throw DatabaseSearchOverflowException();
+	return 1;
     }
 #ifndef SAT_ARTHM
     // These extra limits are enforced so overflow could be detected more efficiently
     if (gapOpen <= LOWER_BOUND/2 || UPPER_BOUND/2 <= gapOpen
 	|| gapExt <= LOWER_BOUND/2 || UPPER_BOUND/2 <= gapExt) {
-	throw DatabaseSearchOverflowException("Gap penalty is too big");
+	return 1;
     }
 #endif
     for (int r = 0; r < alphabetLength; r++)
 	for (int c = 0; c < alphabetLength; c++) {
-	    int score = scoreMatrix[r][c];
+	    int score = scoreMatrix[r * alphabetLength + c];
 	    if (score < LOWER_BOUND || UPPER_BOUND < score) {
-		throw DatabaseSearchOverflowException();
+		return 1;
 	    }
 #ifndef SAT_ARTHM
 	    if (score <= LOWER_BOUND/2 || UPPER_BOUND/2 <= score)
-		throw DatabaseSearchOverflowException("Score matrix has too big value(s)");
+		return 1;
 #endif
 	}	
     // ------------------------------------------------------------------ //
 
 
     // ------------------------ INITIALIZATION -------------------------- //
-    vector<int> bestScores(dbLength, -1); // result
+    for (int i = 0; i < dbLength; i++)
+	scores[i] = -1;
 
     int nextDbSeqIdx = 0; // index in db
     int currDbSeqsIdxs[NUM_SEQS]; // index in db
@@ -133,7 +134,7 @@ SEARCH_DATABASE_DEFINITION(PRECISION) {
 	__m128i P[alphabetLength];
 	SCORE_T profileRow[NUM_SEQS] __attribute__((aligned(16)));
 	for (Byte letter = 0; letter < alphabetLength; letter++) {
-	    int* scoreMatrixRow = scoreMatrix[letter];
+	    int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
 	    for (int i = 0; i < NUM_SEQS; i++) {
 		Byte* dbSeqPos = currDbSeqsPos[i];
 		if (dbSeqPos != 0)
@@ -194,13 +195,13 @@ SEARCH_DATABASE_DEFINITION(PRECISION) {
 	SCORE_T* unpackedMinUlH_P = (SCORE_T *)&minUlH_P;
 	for (int i = 0; i < NUM_SEQS; i++)
 	    if (currDbSeqsPos[i] != 0 && unpackedMinUlH_P[i] <= LOWER_BOUND/2)
-		throw DatabaseSearchOverflowException();
+		return 1;
 #endif
 #ifdef SAT_ARTHM
 	// Since I use saturation, I check if max possible value is reached
 	for (int i = 0; i < NUM_SEQS; i++)
 	    if (currDbSeqsPos[i] != 0 && unpackedMaxH[i] == UPPER_BOUND)
-		throw DatabaseSearchOverflowException();
+		return 1;
 #endif
 	// ---------------------------------------------------------------------- //
 
@@ -215,7 +216,7 @@ SEARCH_DATABASE_DEFINITION(PRECISION) {
 		    if (currDbSeqsLengths[i] == 0) { // If sequence ended
 			numEndedDbSeqs++;
 			// Save best sequence score
-			bestScores[currDbSeqsIdxs[i]] = unpackedMaxH[i];
+			scores[currDbSeqsIdxs[i]] = unpackedMaxH[i];
 			// Load next sequence
 			loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
 					 currDbSeqsLengths[i], db, dbSeqLengths);
@@ -248,5 +249,5 @@ SEARCH_DATABASE_DEFINITION(PRECISION) {
 	// ---------------------------------------------------------------------- //
     }
 
-    return bestScores;
+    return 0;
 }

@@ -2,13 +2,13 @@
 #define SWIMD_HPP
 
 #include <vector>
-#include <exception>
-#include <stdexcept>
 
 using namespace std;
 
 typedef unsigned char Byte; // TODO: name this uchar?
 
+// Error codes for databaseSearch
+#define SWIMD_ERR_OVERFLOW 1
 
 /**
  * v1.0: 
@@ -22,6 +22,7 @@ typedef unsigned char Byte; // TODO: name this uchar?
  *       - HM? use unsigned values to get bigger range (can that be done?)
  *       - HM? use as less registers as possible! Investigate assembly code to determine how to do it.
  *       - maybe pad columns so length%4 == 0, that way I can check for sequence ending only on every 4th column, not every column
+ *       - put consts where possible
  *       - do some serious profiling
  *       - exchange #ifdefs with #if ?
  *       - add throw(smt) on right places
@@ -40,21 +41,22 @@ public:
      * For example, if alphabet is {A,C,T,G} and sequence is ACCTCAG it will be represented as 0112103.
      * Opening of gap is penalized with gapOpen, while gap extension is penalized with gapExt.
      * gapOpen, gapExt and scores from scoreMatrix must be in (INT_MIN/2, INT_MAX/2).
-     * @param query Query sequence.
-     * @param queryLength Length of query sequence.
-     * @param db Array of database sequences (each sequence is also an array).
-     * @param dbLength Number of database sequences.
-     * @param dbSeqLengths Array of lengths of database sequences.
-     * @param gapOpen
-     * @param gapExt
-     * @param scoreMatrix Matrix of dimensions (alphabetLength, alphabetLength).
-     * @param alphabetLength
-     * @return Largest similarity score for every database sequence. Null if overflow happens.
+     * @param [in] query Query sequence.
+     * @param [in] queryLength Length of query sequence.
+     * @param [in] db Array of database sequences (each sequence is also an array).
+     * @param [in] dbLength Number of database sequences.
+     * @param [in] dbSeqLengths Array of lengths of database sequences.
+     * @param [in] gapOpen
+     * @param [in] gapExt
+     * @param [in] scoreMatrix Matrix of dimensions (alphabetLength, alphabetLength).
+     * @param [in] alphabetLength
+     * @param [out] scores Contains score for every database sequence (-1 if not calculated)
+     * @return 0 if all okay, error code otherwise.
      */
-#define SEARCH_DATABASE(PREFIX,SUFFIX)					\
-    vector<int> PREFIX searchDatabase ## SUFFIX				\
+#define SEARCH_DATABASE(PREFIX,SUFFIX)				\
+    int PREFIX searchDatabase ## SUFFIX				\
     (Byte query[], int queryLength, Byte ** db, int dbLength, int dbSeqLengths[], \
-     int gapOpen, int gapExt, int ** scoreMatrix, int alphabetLength)
+     int gapOpen, int gapExt, int * scoreMatrix, int alphabetLength, int scores[])
     
     /**
      * Main entry function for searching database.
@@ -71,8 +73,6 @@ public:
     static SEARCH_DATABASE(, 8);  // searchDatabase8(..)
     static SEARCH_DATABASE(, 16); // searchDatabase16(..)
     static SEARCH_DATABASE(, 32); // searchDatabase32(..)
-
-    class DatabaseSearchOverflowException;
 
 private:
     static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, Byte * &currDbSeqPos, 
@@ -94,24 +94,6 @@ inline bool Swimd::loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDb
 	return false;
     }
 }
-
-/**
- * This exception is thrown when score overflow happens in database search.
- */
-class Swimd::DatabaseSearchOverflowException : public exception {
-public:
-    DatabaseSearchOverflowException(const char* msg = "Overflow detected in database search") {
-	this->msg = msg;
-    }
-    ~DatabaseSearchOverflowException() throw() {};
-
-    const char* what() {
-	return this->msg;
-    }	
-
-private:
-    const char* msg;
-};
 
 
 #endif /* SWIMD_HPP */
