@@ -1,20 +1,20 @@
-#include "Swimd.hpp"
+#include "Swimd.h"
 
 using namespace std;
 
-SEARCH_DATABASE(Swimd::,) {
+SWIMD_SEARCH_DATABASE() {
     int resultCode;
-    resultCode = Swimd::searchDatabase8(query, queryLength,
-					db, dbLength, dbSeqLengths,
-					gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+    resultCode = swimdSearchDatabase8(query, queryLength,
+				      db, dbLength, dbSeqLengths,
+				      gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     if (resultCode != 0) {
-	resultCode = Swimd::searchDatabase16(query, queryLength, 
-					     db, dbLength, dbSeqLengths,
-					     gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+	resultCode = swimdSearchDatabase16(query, queryLength, 
+					   db, dbLength, dbSeqLengths,
+					   gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
 	if (resultCode != 0) {
-	    resultCode = Swimd::searchDatabase32(query, queryLength, 
-						 db, dbLength, dbSeqLengths,
-						 gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+	    resultCode = swimdSearchDatabase32(query, queryLength, 
+					       db, dbLength, dbSeqLengths,
+					       gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
 	}
     }
     return resultCode;

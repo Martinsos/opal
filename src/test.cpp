@@ -5,14 +5,14 @@
 #include <algorithm>
 #include <ctime>
 
-#include "Swimd.hpp"
+#include "Swimd.h"
 
 using namespace std;
 
-void fillRandomly(Byte* seq, int seqLength, int alphabetLength);
+void fillRandomly(unsigned char* seq, int seqLength, int alphabetLength);
 int * createSimpleScoreMatrix(int alphabetLength, int match, int mismatch);
-int calculateSW(Byte query[], int queryLength, Byte ** db, int dbLength, int dbSeqLengths[],
-			int gapOpen, int gapExt, int * scoreMatrix, int alphabetLength, int scores[]);
+int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int dbLength, int dbSeqLengths[],
+		int gapOpen, int gapExt, int * scoreMatrix, int alphabetLength, int scores[]);
 void printInts(int a[], int aLength);
 int maximum(int a[], int aLength);
 
@@ -26,16 +26,16 @@ int main() {
 
     // Create random query
     int queryLength = 300;
-    Byte query[queryLength];
+    unsigned char query[queryLength];
     fillRandomly(query, queryLength, alphabetLength);
 
     // Create random database
     int dbLength = 500;
-    Byte * db[dbLength];
+    unsigned char * db[dbLength];
     int dbSeqsLengths[dbLength];
     for (int i = 0; i < dbLength; i++) {
 	dbSeqsLengths[i] = 150 + rand()%200;
-	db[i] = new Byte[dbSeqsLengths[i]];
+	db[i] = new unsigned char[dbSeqsLengths[i]];
 	fillRandomly(db[i], dbSeqsLengths[i], alphabetLength);
     }
     
@@ -62,8 +62,8 @@ int main() {
     printf("Starting Swimd!\n");
     start = clock();
     int scores[dbLength];
-    int resultCode = Swimd::searchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
-					   gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+    int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
+					 gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     finish = clock();
     double time1 = ((double)(finish-start))/CLOCKS_PER_SEC;
     printf("Time: %lf\n", ((double)(finish-start))/CLOCKS_PER_SEC);
@@ -111,7 +111,7 @@ int main() {
     delete[] scoreMatrix;
 }
 
-void fillRandomly(Byte* seq, int seqLength, int alphabetLength) {
+void fillRandomly(unsigned char* seq, int seqLength, int alphabetLength) {
     for (int i = 0; i < seqLength; i++)
 	seq[i] = rand() % 4;
 }
@@ -125,8 +125,8 @@ int * createSimpleScoreMatrix(int alphabetLength, int match, int mismatch) {
     return scoreMatrix;
 }
 
-int calculateSW(Byte query[], int queryLength, Byte ** db, int dbLength, int dbSeqLengths[],
-			int gapOpen, int gapExt, int * scoreMatrix, int alphabetLength, int scores[]) {    
+int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int dbLength, int dbSeqLengths[],
+		int gapOpen, int gapExt, int * scoreMatrix, int alphabetLength, int scores[]) {    
     int prevHs[queryLength];
     int prevEs[queryLength];
 

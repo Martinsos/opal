@@ -3,7 +3,7 @@ extern "C" {
 #include <smmintrin.h>
 }
 
-#include "Swimd.hpp"
+#include "Swimd.h"
 
 using namespace std;
 
@@ -57,11 +57,13 @@ using namespace std;
 #endif
 // ---------------------------------------------------------------------- //
 
+static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char * &currDbSeqPos, 
+			     int &currDbSeqLength, unsigned char ** db, int dbSeqLengths[]);
+
 // Needed because of problems argument prescan has with concatenation
-#define SEARCH_DATABASE_DEFINITION(PRECISION) SEARCH_DATABASE(Swimd ::, PRECISION)
+#define SWIMD_SEARCH_DATABASE_DEFINITION(PRECISION) SWIMD_SEARCH_DATABASE(PRECISION)
 
-
-SEARCH_DATABASE_DEFINITION(PRECISION) {
+SWIMD_SEARCH_DATABASE_DEFINITION(PRECISION) {
     // ----------------------- CHECK ARGUMENTS -------------------------- //
     // Check if Q, R or scoreMatrix have values too big for used score type
     if (gapOpen < LOWER_BOUND || UPPER_BOUND < gapOpen
@@ -95,7 +97,7 @@ SEARCH_DATABASE_DEFINITION(PRECISION) {
 
     int nextDbSeqIdx = 0; // index in db
     int currDbSeqsIdxs[NUM_SEQS]; // index in db
-    Byte* currDbSeqsPos[NUM_SEQS]; // current element for each current database sequence
+    unsigned char* currDbSeqsPos[NUM_SEQS]; // current element for each current database sequence
     int currDbSeqsLengths[NUM_SEQS];
     int shortestDbSeqLength = -1;  // length of shortest sequence among current database sequences
     int numEndedDbSeqs = 0; // Number of sequences that ended
@@ -133,10 +135,10 @@ SEARCH_DATABASE_DEFINITION(PRECISION) {
 	// TODO: Rognes uses pshufb here, I don't know how/why?
 	__m128i P[alphabetLength];
 	SCORE_T profileRow[NUM_SEQS] __attribute__((aligned(16)));
-	for (Byte letter = 0; letter < alphabetLength; letter++) {
+	for (unsigned char letter = 0; letter < alphabetLength; letter++) {
 	    int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
 	    for (int i = 0; i < NUM_SEQS; i++) {
-		Byte* dbSeqPos = currDbSeqsPos[i];
+		unsigned char* dbSeqPos = currDbSeqsPos[i];
 		if (dbSeqPos != 0)
 		    profileRow[i] = (SCORE_T)scoreMatrixRow[*dbSeqPos];
 	    }
@@ -250,4 +252,20 @@ SEARCH_DATABASE_DEFINITION(PRECISION) {
     }
 
     return 0;
+}
+
+
+static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char* &currDbSeqPos, 
+				    int &currDbSeqLength, unsigned char** db, int dbSeqLengths[]) {
+    if (nextDbSeqIdx < dbLength) { // If there is sequence to load
+	currDbSeqIdx = nextDbSeqIdx;
+	currDbSeqPos = db[nextDbSeqIdx];
+	currDbSeqLength = dbSeqLengths[nextDbSeqIdx];
+	nextDbSeqIdx++;
+	return true;
+    } else { // If there are no more sequences to load, load "null" sequence
+	currDbSeqIdx = currDbSeqLength = -1; // Set to -1 if there are no more sequences
+	currDbSeqPos = 0;
+	return false;
+    }
 }
