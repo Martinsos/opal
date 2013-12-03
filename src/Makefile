@@ -1,6 +1,6 @@
 CC = g++
-CFLAGS = -msse4.2
-OBJECTS = Swimd.o $(foreach p,8 16 32,Swimd_searchDatabase$(p).o)
+CFLAGS = -msse4.2 -O3
+OBJECTS = Swimd.o
 
 DEBUG ?= 0
 ifeq ($(DEBUG), 1)
@@ -14,11 +14,6 @@ test: $(OBJECTS) test.cpp
 
 Swimd.o: Swimd.cpp Swimd.h
 	$(CC) $(CFLAGS) -c Swimd.cpp
-
-# I generate multiple .o files from Swimd_searchDatabase.cpp,
-# each containing database search function for specific precision.
-Swimd_searchDatabase%.o: Swimd_searchDatabase.cpp Swimd.h
-	$(CC) $(CFLAGS) -DSSE_$* -c Swimd_searchDatabase.cpp -o $@
 
 clean:
 	rm *.o test

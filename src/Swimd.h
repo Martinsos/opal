@@ -15,13 +15,18 @@
  *       - put consts where possible
  *       - do some serious profiling
  *       - does SSE overflow wrap?
+ *       - Do genomes usually work with score matrices or just mismatch and match values?
  *       - think of some intelligent way on deciding which precision to use when
  *           - IMPORTANT! basic idea: return map instead of vector, use partial results when overflow happens
  *           - another idea: dont stop when overflow but go to next sequence, and report all which had overflow
  *           - third idea: do calculation like in basic idea but in blocks, so smaller precisions get more chance
  *************************************************************************************/
 
-// Error codes for databaseSearch
+#ifdef __cplusplus 
+extern "C" {
+#endif
+
+    // Error codes for databaseSearch
 #define SWIMD_ERR_OVERFLOW 1
 
 /**
@@ -43,24 +48,12 @@
  * @return 0 if all okay, error code otherwise.
  */
 int swimdSearchDatabase(unsigned char query[], int queryLength, 
-			unsigned char** db, int dbLength, int dbSeqLengths[],
-			int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-			int scores[]);
+                        unsigned char** db, int dbLength, int dbSeqLengths[],
+                        int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+                        int scores[]);
 
-
-#define SWIMD_SEARCH_DATABASE(SUFFIX) \
-    int swimdSearchDatabase ## SUFFIX(unsigned char query[], int queryLength, \
-				      unsigned char** db, int dbLength, int dbSeqLengths[], \
-				      int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength, \
-				      int scores[])
-    
-/**
- * Implementations that use different score precision.
- * Number of concurrently calculated sequences is 128 / precision,
- * therefore less precision is more speed.
- */
-SWIMD_SEARCH_DATABASE(8);
-SWIMD_SEARCH_DATABASE(16);
-SWIMD_SEARCH_DATABASE(32);
+#ifdef __cplusplus 
+}
+#endif
 
 #endif /* SWIMD_H */
