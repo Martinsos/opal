@@ -2,19 +2,22 @@
 #include <limits>
 
 extern "C" {
-#include <smmintrin.h>
+#include <immintrin.h> // AVX
 }
 
 #include "Swimd.h"
 
 //------------------------------------ SIMD PARAMETERS ---------------------------------//
+/**
+ * Contains parameters and SIMD instructions specific for certain score type.
+ */
 template<typename T> class Simd {};
 
 template<>
 struct Simd<char> {
-    typedef char type;
-    static const int numSeqs = 16;
-    static const bool satArthm = true;
+    typedef char type; //!< Type that will be used for score
+    static const int numSeqs = 16; //!< Number of sequences that can be done in parallel.
+    static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
     static inline __m128i add(const __m128i& a, const __m128i& b) { return _mm_adds_epi8(a, b); }
     static inline __m128i sub(const __m128i& a, const __m128i& b) { return _mm_subs_epi8(a, b); }
     static inline __m128i min(const __m128i& a, const __m128i& b) { return _mm_min_epi8(a, b); }
@@ -53,7 +56,7 @@ static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx,
 
 
 template<class SIMD>
-static int swimdSearchDatabase1(unsigned char query[], int queryLength, 
+static int swimdSearchDatabase_(unsigned char query[], int queryLength, 
                                 unsigned char** db, int dbLength, int dbSeqLengths[],
                                 int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
                                 int scores[]) {
@@ -266,16 +269,20 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
                                unsigned char** db, int dbLength, int dbSeqLengths[],
                                int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
                                int scores[]) {
+    #ifndef __SSE4_1__
+    return SWIMD_ERR_NO_SIMD_SUPPORT;
+    #endif
+
     int resultCode;
-    resultCode = swimdSearchDatabase1< Simd<char> >(query, queryLength, 
+    resultCode = swimdSearchDatabase_< Simd<char> >(query, queryLength, 
                                                     db, dbLength, dbSeqLengths, 
                                                     gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     if (resultCode != 0) {
-	    resultCode = swimdSearchDatabase1< Simd<short> >(query, queryLength, 
+	    resultCode = swimdSearchDatabase_< Simd<short> >(query, queryLength, 
                                                          db, dbLength, dbSeqLengths,
                                                          gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
 	    if (resultCode != 0) {
-	        resultCode = swimdSearchDatabase1< Simd<int> >(query, queryLength, 
+	        resultCode = swimdSearchDatabase_< Simd<int> >(query, queryLength, 
                                                            db, dbLength, dbSeqLengths,
                                                            gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
         }

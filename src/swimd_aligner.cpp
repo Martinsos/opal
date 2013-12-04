@@ -17,7 +17,6 @@ int main(int argc, char * const argv[]) {
     int gapExt = 1;
     ScoreMatrix scoreMatrix = getBlosum50();
     
-
     //----------------------------- PARSE COMMAND LINE ------------------------//
     char* scoreMatrixFilepath = 0;
     bool silent = false;
