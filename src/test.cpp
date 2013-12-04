@@ -66,7 +66,7 @@ int main() {
                                          gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     finish = clock();
     double time1 = ((double)(finish-start))/CLOCKS_PER_SEC;
-    printf("Time: %lf\n", ((double)(finish-start))/CLOCKS_PER_SEC);
+    printf("Time: %lf\n", time1);
 
     if (resultCode != 0) {
         printf("Overflow happened!");
@@ -86,7 +86,7 @@ int main() {
                              gapOpen, gapExt, scoreMatrix, alphabetLength, scores2);
     finish = clock();
     double time2 = ((double)(finish-start))/CLOCKS_PER_SEC;
-    printf("Time: %lf\n", ((double)(finish-start))/CLOCKS_PER_SEC);
+    printf("Time: %lf\n", time2);
 
     // Print result
     printf("Result: ");
