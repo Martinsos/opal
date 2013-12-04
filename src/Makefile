@@ -1,5 +1,5 @@
 CC = g++
-CFLAGS = -msse4.2 -O3
+CFLAGS = -march=native -O3 # -march=native will compile for correct simd
 OBJECTS = Swimd.o
 
 DEBUG ?= 0
