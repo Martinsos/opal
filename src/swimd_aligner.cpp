@@ -4,9 +4,10 @@
 #include <cstdio>
 #include <vector>
 #include <ctime>
+#include <string>
 
 #include "Swimd.h"
-#include "ScoreMatrix.h"
+#include "ScoreMatrix.hpp"
 
 using namespace std;
 
@@ -15,17 +16,20 @@ int readFastaSequences(const char* path, char* alphabet, int alphabetLength, vec
 int main(int argc, char * const argv[]) {
     int gapOpen = 3;
     int gapExt = 1;
-    ScoreMatrix scoreMatrix = getBlosum50();
+    ScoreMatrix scoreMatrix;
     
     //----------------------------- PARSE COMMAND LINE ------------------------//
-    char* scoreMatrixFilepath = 0;
+    string scoreMatrixName = "Blosum50";
+    bool scoreMatrixFileGiven = false;
+    char scoreMatrixFilepath[512];
     bool silent = false;
     int option;
-    while ((option = getopt(argc, argv, "o:e:m:s")) >= 0) {
+    while ((option = getopt(argc, argv, "o:e:m:f:s")) >= 0) {
         switch (option) {
         case 'o': gapOpen = atoi(optarg); break;
         case 'e': gapExt = atoi(optarg); break;
-        case 'm': strcpy(scoreMatrixFilepath, optarg); break;
+        case 'm': scoreMatrixName = string(optarg); break;
+        case 'f': scoreMatrixFileGiven = true; strcpy(scoreMatrixFilepath, optarg); break;
         case 's': silent = true; break;
         }
     }
@@ -35,22 +39,34 @@ int main(int argc, char * const argv[]) {
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "\t-go N\tN is gap opening penalty. [default: 3]\n");
         fprintf(stderr, "\t-e N\tN is gap extension penalty. [default: 1]\n");
-        fprintf(stderr, "\t-m FILE\tFILE contains score matrix and some additional data. [default: Blosum50]\n");
+        fprintf(stderr, "\t-m Blosum50\tScore matrix to be used. [default: Blosum50]\n"); 
+        fprintf(stderr, "\t-f FILE\tFILE contains score matrix and some additional data. Overrides -m.\n");
         fprintf(stderr, "\t-s\tIf specified, there will be no score output (silent mode).\n");
         return 1;
     }
     //-------------------------------------------------------------------------//
 
-    if (scoreMatrixFilepath != 0) {
-        // TODO: read matrix from file and store it to scoreMatrix
+    // Set score matrix by name
+    if (scoreMatrixName == "Blosum50") 
+        scoreMatrix = ScoreMatrix::getBlosum50();
+    else {
+        fprintf(stderr, "Given score matrix name is not valid\n");
+        exit(1);
     }
+    // Set score matrix by filepath
+    if (scoreMatrixFileGiven) {
+        scoreMatrix = ScoreMatrix(scoreMatrixFilepath);
+    }
+
+    char* alphabet = scoreMatrix.getAlphabet();
+    int alphabetLength = scoreMatrix.getAlphabetLength();
 
     int readResult;
     // Build query
     char* queryFilepath = argv[optind];
     vector< vector<unsigned char> >* querySequences = new vector< vector<unsigned char> >();
     printf("Reading query fasta file...\n");
-    readResult = readFastaSequences(queryFilepath, scoreMatrix.alphabet, scoreMatrix.alphabetLength, querySequences);
+    readResult = readFastaSequences(queryFilepath, alphabet, alphabetLength, querySequences);
     if (readResult) {
         printf("Error: There is no file with name %s\n", queryFilepath);
         return 1;
@@ -62,7 +78,7 @@ int main(int argc, char * const argv[]) {
     char* dbFilepath = argv[optind+1];    
     vector< vector<unsigned char> >* dbSequences = new vector< vector<unsigned char> >();
     printf("Reading database fasta file...\n");
-    readResult = readFastaSequences(dbFilepath, scoreMatrix.alphabet, scoreMatrix.alphabetLength, dbSequences);
+    readResult = readFastaSequences(dbFilepath, alphabet, alphabetLength, dbSequences);
     if (readResult) {
         printf("Error: There is no file with name %s\n", dbFilepath);
         return 1;
@@ -80,7 +96,7 @@ int main(int argc, char * const argv[]) {
     int* scores = new int[dbLength];
     clock_t start = clock();
     int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
-                                         gapOpen, gapExt, scoreMatrix.matrix, scoreMatrix.alphabetLength,
+                                         gapOpen, gapExt, scoreMatrix.getMatrix(), alphabetLength,
                                          scores);
     clock_t finish = clock();
     double cpuTime = ((double)(finish-start))/CLOCKS_PER_SEC;
