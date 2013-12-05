@@ -5,6 +5,7 @@
 #include <vector>
 #include <ctime>
 #include <string>
+#include <climits>
 
 #include "Swimd.h"
 #include "ScoreMatrix.hpp"
@@ -109,7 +110,26 @@ int main(int argc, char * const argv[]) {
         printf("\n");
     }
 
-    printf("Cpu time of searching: %lf\n", cpuTime);
+    printf("\nCpu time of searching: %lf\n", cpuTime);
+
+
+    int for8, for16, for32;
+    for8 = for16 = for32 = 0;
+    double averageScore = 0;
+    for (int i = 0; i < dbLength; i++) {
+        averageScore += (double)scores[i] / dbLength;
+        if (scores[i] < CHAR_MAX)
+            for8++;
+        else if (scores[i] < SHRT_MAX)
+            for16++;
+        else
+            for32++;
+    }
+    printf("\nDatabase statistics:\n");
+    printf("\tFor 8  (< %10d): %8d\n", CHAR_MAX, for8);
+    printf("\tFor 16 (< %10d): %8d\n", SHRT_MAX, for16);
+    printf("\tFor 32 (< %10d): %8d\n",  INT_MAX, for32);
+    printf("\tAverage score: %lf\n", averageScore);    
 
     // Free allocated space
     delete querySequences;
@@ -118,6 +138,8 @@ int main(int argc, char * const argv[]) {
     
     return 0;
 }
+
+
 
 
 /** Reads sequences from fasta file.
