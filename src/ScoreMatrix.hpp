@@ -13,6 +13,11 @@ class ScoreMatrix {
  public:
     ScoreMatrix();
     ScoreMatrix(vector<char> alphabet, vector<int> matrix);
+    /**
+     * Format of matrix file: 
+     *  - first line contains letters from alphabet naming columns separated with spaces.
+     *  - each next line is one row of matrix (integers separated with spaces).
+     */
     ScoreMatrix(const char* filepath);
     
     int getAlphabetLength();
