@@ -167,7 +167,7 @@ int readFastaSequences(const char* path, char* alphabet, int alphabetLength, vec
                         inSequence = true;
                         seqs->push_back(vector<unsigned char>());
                     }
-                    //
+
                     seqs->back().push_back(letterIdx[c]);
                 }
             }
