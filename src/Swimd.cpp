@@ -94,6 +94,8 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
     for (int i = 0; i < dbLength; i++)
         scores[i] = -1;
 
+    __m128i zeroes = SIMD::set1(0);
+
     int nextDbSeqIdx = 0; // index in db
     int currDbSeqsIdxs[SIMD::numSeqs]; // index in db
     unsigned char* currDbSeqsPos[SIMD::numSeqs]; // current element for each current database sequence
@@ -160,8 +162,7 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
             __m128i F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R));
 
             // Calculate H
-            __m128i H = SIMD::set1(0);
-    	    H = SIMD::max(H, E);
+    	    __m128i H = SIMD::max(zeroes, E);
             H = SIMD::max(H, F);
             __m128i ulH_P = SIMD::add(ulH, P[query[r]]);
             H = SIMD::max(H, ulH_P); // Possible overflow that is to be detected

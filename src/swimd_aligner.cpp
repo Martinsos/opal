@@ -197,6 +197,7 @@ int readFastaSequences(const char* path, char* alphabet, int alphabetLength, vec
     }
 
     fclose(file);
+    return 0;
 }
  
 
