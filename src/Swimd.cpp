@@ -2,6 +2,7 @@
 #include <limits>
 #include <cstdlib>
 #include <ctime>
+#include <algorithm>
 
 extern "C" {
 #include <immintrin.h> // AVX
@@ -395,38 +396,48 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
     for (int i = 0; i < dbLength; i++)
         scores[i] = SWIMD_SCORE_UNKNOWN;
 
-    DbSeqSearchState* seqStates = new DbSeqSearchState[dbLength];
-    for (int i = 0; i < dbLength; i++)
-        seqStates[i] = DbSeqSearchState();
-
     int resultCode;
 
-    clock_t start, finish;
-    start = clock();
-    resultCode = swimdSearchDatabase_< Simd<char> >(query, queryLength, 
-                                                    db, dbLength, dbSeqLengths, 
-                                                    gapOpen, gapExt, scoreMatrix, alphabetLength, 
-                                                    scores, seqStates);
-    finish = clock();
-    printf("Cpu time for 8bit: %lf\n", ((double)(finish-start))/CLOCKS_PER_SEC);
-    if (resultCode != 0) {
+    double time8, time16, time32;
+    time8 = time16 = time32 = 0;
+
+    int chunkSize = 1024;
+
+    DbSeqSearchState* seqStates = new DbSeqSearchState[chunkSize];
+    for (int i = 0; i < chunkSize; i++)
+        seqStates[i] = DbSeqSearchState();
+
+    for (int chunkStart = 0; chunkStart < dbLength; chunkStart += chunkSize) {
+        int dbChunkLength = std::min(chunkSize, dbLength - chunkStart);
+
+        clock_t start, finish;
         start = clock();
-	    resultCode = swimdSearchDatabase_< Simd<short> >(query, queryLength, 
-                                                         db, dbLength, dbSeqLengths,
-                                                         gapOpen, gapExt, scoreMatrix, alphabetLength,
-                                                         scores, seqStates);
-        finish = clock();
-        printf("Cpu time for 16bit: %lf\n", ((double)(finish-start))/CLOCKS_PER_SEC);
-	    if (resultCode != 0) {
+        resultCode = swimdSearchDatabase_< Simd<char> >(query, queryLength, 
+                                                        db+chunkStart, dbChunkLength, dbSeqLengths+chunkStart, 
+                                                        gapOpen, gapExt, scoreMatrix, alphabetLength, 
+                                                        scores+chunkStart, seqStates);
+        time8 += ((double)(clock()-start))/CLOCKS_PER_SEC;
+        if (resultCode != 0) {
             start = clock();
-	        resultCode = swimdSearchDatabase_< Simd<int> >(query, queryLength, 
-                                                           db, dbLength, dbSeqLengths,
-                                                           gapOpen, gapExt, scoreMatrix, alphabetLength,
-                                                           scores, seqStates);
-            finish = clock();
-            printf("Cpu time for 32bit: %lf\n", ((double)(finish-start))/CLOCKS_PER_SEC);
+            resultCode = swimdSearchDatabase_< Simd<short> >(query, queryLength, 
+                                                             db+chunkStart, dbChunkLength, dbSeqLengths+chunkStart, 
+                                                             gapOpen, gapExt, scoreMatrix, alphabetLength, 
+                                                             scores+chunkStart, seqStates);
+            time16 += ((double)(clock()-start))/CLOCKS_PER_SEC;
+            if (resultCode != 0) {
+                start = clock();
+                resultCode = swimdSearchDatabase_< Simd<int> >(query, queryLength, 
+                                                               db+chunkStart, dbChunkLength, dbSeqLengths+chunkStart, 
+                                                               gapOpen, gapExt, scoreMatrix, alphabetLength, 
+                                                               scores+chunkStart, seqStates);
+                time32 += ((double)(clock()-start))/CLOCKS_PER_SEC;
+            }
         }
     }
+
+    printf("Cpu time for  8bit: %lf\n", time8);
+    printf("Cpu time for 16bit: %lf\n", time16);
+    printf("Cpu time for 32bit: %lf\n", time32);
 
     delete[] seqStates;
     return resultCode;
