@@ -143,6 +143,8 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
         if(scores[i] == SWIMD_SCORE_UNKNOWN)
             numSeqsToCalculate++;
 
+    __m128i zeroes = SIMD::set1(0); // Useful
+
     //// --- Data for tracking sequences "loaded" in simd register --- //
     int nextDbSeqIdx = 0; // index in db
     int currDbSeqsIdxs[SIMD::numSeqs]; // index in db for each current database sequence
@@ -201,8 +203,7 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
             __m128i F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R));
 
             // Calculate H
-            __m128i H = SIMD::set1(0);
-    	    H = SIMD::max(H, E);
+            __m128i H = SIMD::max(zeroes, E);
             H = SIMD::max(H, F);
             __m128i ulH_P = SIMD::add(ulH, P[query[r]]);
             H = SIMD::max(H, ulH_P); // Possible overflow that is to be detected
@@ -220,6 +221,10 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
 
             newEs[r] = E;
             newHs[r] = H;
+            
+            /**
+             * Notice: I do not use 'set' in core loop because it is very slow!
+             */
         }
         // ---------------------------------------------------------------------- //
 
@@ -262,7 +267,7 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
             for (int r = 0; r < queryLength; r++) {
                 typename SIMD::type* unpackedPrevHs = (typename SIMD::type *)(prevHs + r);
                 typename SIMD::type* unpackedPrevEs = (typename SIMD::type *)(prevEs + r);
-                seqState->prevHs[r] = unpackedPrevHs[simdIdx]; // TODO: Is this ok?
+                seqState->prevHs[r] = unpackedPrevHs[simdIdx];
                 seqState->prevEs[r] = unpackedPrevEs[simdIdx];
             }
             seqState->currSeqElement = currDbSeqsPos[simdIdx];
@@ -346,7 +351,7 @@ static inline bool loadNextSequence(const int endedSeqSimdIdx, int &nextSeqIdx, 
         typename SIMD::type allZero[SIMD::numSeqs] __attribute__((aligned(16)));
         for (int i = 0; i < SIMD::numSeqs; i++)
             allZero[i] = 0;
-
+        
         // Set prevHs and prevEs: set to 0 if no state, otherwise to value saved in state.
         for (int r = 0; r < queryLength; r++) {
             // Set prevHs[r][endedSeqSimIdx]
