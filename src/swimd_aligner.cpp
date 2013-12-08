@@ -151,7 +151,7 @@ int main(int argc, char * const argv[]) {
  */
 int readFastaSequences(const char* path, char* alphabet, int alphabetLength, vector< vector<unsigned char> >* seqs) {
     seqs->clear();
-    
+
     FILE* file = fopen(path, "r");
     if (file == 0)
         return 1;
@@ -197,6 +197,7 @@ int readFastaSequences(const char* path, char* alphabet, int alphabetLength, vec
     }
 
     fclose(file);
+    return 0;
 }
  
 
