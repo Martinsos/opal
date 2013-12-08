@@ -396,7 +396,7 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
     for (int i = 0; i < dbLength; i++)
         scores[i] = SWIMD_SCORE_UNKNOWN;
 
-    int resultCode;
+    int resultCode = SWIMD_ERR_UNKNOWN;
 
     double time8, time16, time32;
     time8 = time16 = time32 = 0;
@@ -410,7 +410,7 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
     for (int chunkStart = 0; chunkStart < dbLength; chunkStart += chunkSize) {
         int dbChunkLength = std::min(chunkSize, dbLength - chunkStart);
 
-        clock_t start, finish;
+        clock_t start;
         start = clock();
         resultCode = swimdSearchDatabase_< Simd<char> >(query, queryLength, 
                                                         db+chunkStart, dbChunkLength, dbSeqLengths+chunkStart, 

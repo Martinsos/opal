@@ -32,6 +32,7 @@ extern "C" {
 // Error codes for databaseSearch
 #define SWIMD_ERR_OVERFLOW 1 //!< Returned when score overflow happens.
 #define SWIMD_ERR_NO_SIMD_SUPPORT 2 //!< Returned if available SIMD is not SSE4.1 or higher.
+#define SWIMD_ERR_UNKNOWN 3 //!< Unkown error
 
 #define SWIMD_SCORE_UNKNOWN -1 //!< Used to represent score that has not been calculated.
 

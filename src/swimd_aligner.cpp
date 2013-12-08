@@ -103,6 +103,11 @@ int main(int argc, char * const argv[]) {
     double cpuTime = ((double)(finish-start))/CLOCKS_PER_SEC;
     // ---------------------------------------------------------------------------- //
     
+    if (resultCode) {
+        printf("Error occured!\n");
+        exit(1);
+    }
+
     if (!silent) {
         printf("Scores: \n");
         for (int i = 0; i < dbLength; i++)

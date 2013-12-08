@@ -4,7 +4,7 @@ CFLAGS = -march=native
 
 DEBUG ?= 0
 ifeq ($(DEBUG), 1)
-	CFLAGS += -g
+	CFLAGS += -g -Wall
 endif
 ifeq ($(DEBUG), 0)
 	CFLAGS += -O3
