@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <limits>
 #include <cstdlib>
+#include <ctime>
 
 extern "C" {
 #include <immintrin.h> // AVX
@@ -135,15 +136,19 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
 
 
     // ------------------------ INITIALIZATION -------------------------- //
+    int numOverflowedSeqs = 0; // Number of overflowed database sequences.
+
+    int numSeqsToCalculate = 0; // Number of sequences to be calculated.
     for (int i = 0; i < dbLength; i++)
-        scores[i] = -1;
+        if(scores[i] == SWIMD_SCORE_UNKNOWN)
+            numSeqsToCalculate++;
 
     //// --- Data for tracking sequences "loaded" in simd register --- //
     int nextDbSeqIdx = 0; // index in db
     int currDbSeqsIdxs[SIMD::numSeqs]; // index in db for each current database sequence
     unsigned char* currDbSeqsPos[SIMD::numSeqs]; // current element for each current database sequence
     int currDbSeqsResiduesLeft[SIMD::numSeqs];
-    int numFinishedDbSeqs = 0; // Number of sequences that are finished
+    int numEndedDbSeqs = 0; // Number of sequences that ended
     //// ------------------------------------------------------------- //
     
     __m128i Q = SIMD::set1(gapOpen);
@@ -156,17 +161,16 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
 
     // Load new sequences.
     for (int i = 0; i < SIMD::numSeqs; i++)
-        loadNextSequence<SIMD>(i, nextDbSeqIdx, queryLength,
+        loadNextSequence<SIMD>(i, nextDbSeqIdx, queryLength, scores,
                                currDbSeqsIdxs, currDbSeqsPos, currDbSeqsResiduesLeft,
                                db, dbLength, dbSeqLengths,
-                               seqStates[nextDbSeqIdx],
+                               seqStates,
                                prevHs, prevEs, maxH);
     // ------------------------------------------------------------------ //
 
 
     // For each column
-    while (numFinishedDbSeqs < dbLength) {	
-        printf("racunam query profile\n");
+    while (numEndedDbSeqs < numSeqsToCalculate) {
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
         __m128i P[alphabetLength];
@@ -187,7 +191,7 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
         uF = uH = ulH = SIMD::set1(0); // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
 
         __m128i minUlH_P = SIMD::set1(0); // Used for detecting the overflow when there is no saturation arithmetic
-        printf("Idem u glavnu petlju\n");
+
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
             // Calculate E = max(lH-Q, lE-R)
@@ -218,7 +222,7 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
             newHs[r] = H;
         }
         // ---------------------------------------------------------------------- //
-        printf("Radim malo predracuna.");
+
         typename SIMD::type* unpackedMaxH = (typename SIMD::type*)&maxH;
 
         bool isSeqEnded[SIMD::numSeqs]; // isSeqEnded[i] is true if corresponding sequence ended.
@@ -228,7 +232,7 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
 
         // ------------------------ OVERFLOW DETECTION -------------------------- //
         int overflowedSimdIdxs[SIMD::numSeqs]; // Indexes of simd registers that overflowed
-        int numOverflowedSeqs = 0; // Number of database sequences that overflowed
+        int numOverflowedCurrSeqs = 0; // Number of current database sequences that overflowed
         if (!SIMD::satArthm) { // When not using saturation arithmetic
             // This check is based on following assumptions: 
             //  - overflow wraps
@@ -236,18 +240,19 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
             typename SIMD::type* unpackedMinUlH_P = (typename SIMD::type *)&minUlH_P;
             for (int i = 0; i < SIMD::numSeqs; i++)
                 if (currDbSeqsPos[i] != 0 && unpackedMinUlH_P[i] <= LOWER_BOUND/2)
-                    overflowedSimdIdxs[numOverflowedSeqs++] = i;
+                    overflowedSimdIdxs[numOverflowedCurrSeqs++] = i;
         } else { // When using saturation arithmetic
             // Since I use saturation, I check if max possible value is reached
             for (int i = 0; i < SIMD::numSeqs; i++)
                 if (currDbSeqsPos[i] != 0 && unpackedMaxH[i] == UPPER_BOUND)
-                    overflowedSimdIdxs[numOverflowedSeqs++] = i;
+                    overflowedSimdIdxs[numOverflowedCurrSeqs++] = i;
         }
+        numOverflowedSeqs += numOverflowedCurrSeqs;
         // ---------------------------------------------------------------------- //
 
         // ------------------------- OVERFLOW HANDLING -------------------------- //
         // Save states of overflowed database sequences.
-        for (int i = 0; i < numOverflowedSeqs; i++) {
+        for (int i = 0; i < numOverflowedCurrSeqs; i++) {
             int simdIdx = overflowedSimdIdxs[i];
             int seqIdx = currDbSeqsIdxs[simdIdx];
             // Save state of sequence.
@@ -255,25 +260,28 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
             if (!seqState->isSet)
                 seqState->set(queryLength);
             for (int r = 0; r < queryLength; r++) {
-                seqState->prevHs[r] = ((typename SIMD::type*)(prevHs + r))[simdIdx]; // TODO: Is this ok?
-                seqState->prevEs[r] = ((typename SIMD::type*)(prevEs + r))[simdIdx];
+                typename SIMD::type* unpackedPrevHs = (typename SIMD::type *)(prevHs + r);
+                typename SIMD::type* unpackedPrevEs = (typename SIMD::type *)(prevEs + r);
+                seqState->prevHs[r] = unpackedPrevHs[simdIdx]; // TODO: Is this ok?
+                seqState->prevEs[r] = unpackedPrevEs[simdIdx];
             }
             seqState->currSeqElement = currDbSeqsPos[simdIdx];
-            seqState->numResiduesLeft = currDbSeqsResiduesLeft[i];
+            seqState->numResiduesLeft = currDbSeqsResiduesLeft[simdIdx];
             // Mark sequence as ended.
             isSeqEnded[simdIdx] = true;
+            numEndedDbSeqs++;            
         }
         // ---------------------------------------------------------------------- //
 
         // Update number of residues left and handle finished sequences
         for (int i = 0; i < SIMD::numSeqs; i++)
-            if (currDbSeqsPos[i] != 0) { // If not null sequence
+            if (currDbSeqsPos[i] != 0 && !isSeqEnded[i]) { // If not null sequence and not ended (by overflow)
                 currDbSeqsResiduesLeft[i]--;
                 if (currDbSeqsResiduesLeft[i] == 0) { // If sequence is finished
                     // Handle finished sequence
-                    numFinishedDbSeqs++;
                     scores[currDbSeqsIdxs[i]] = unpackedMaxH[i]; // Save best sequence score.
                     isSeqEnded[i] = true; // Mark sequence as ended.
+                    numEndedDbSeqs++;
                     // Unset the state
                     seqStates[currDbSeqsIdxs[i]].unset();
                 }
@@ -282,59 +290,50 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
         // Load new sequences on place of those that ended.
         for (int i = 0; i < SIMD::numSeqs; i++)
             if (isSeqEnded[i]) {
-                loadNextSequence<SIMD>(i, nextDbSeqIdx, queryLength,
+                loadNextSequence<SIMD>(i, nextDbSeqIdx, queryLength, scores,
                                        currDbSeqsIdxs, currDbSeqsPos, currDbSeqsResiduesLeft,
                                        db, dbLength, dbSeqLengths,
-                                       seqStates[nextDbSeqIdx],
-                                       prevHs, prevEs, maxH);
+                                       seqStates,
+                                       newHs, newEs, maxH);
             }   
-        printf("Loadao sam sekvence\n");
+
         // Move for one place in all sequences that were not just loaded (that did not end) and are not null.
         for (int i = 0; i < SIMD::numSeqs; i++)
             if (currDbSeqsPos[i] != 0 && !isSeqEnded[i])
                 currDbSeqsPos[i]++;
-        printf("Idem swapati\n");
+
         // Swap prevHs with Hs and prevEs with Es
         __m128i* tmp;
         tmp = prevHs; prevHs = newHs; newHs = tmp;
         tmp = prevEs; prevEs = newEs; newEs = tmp;
-        printf("Gotov s kolonom\n");
     }
 
+    if (numOverflowedSeqs > 0)
+        return SWIMD_ERR_OVERFLOW;
     return 0;
 }
 
-/*
-static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char* &currDbSeqPos, 
-                                    int &currDbSeqLength, unsigned char** db, int dbSeqLengths[]) {
-    if (nextDbSeqIdx < dbLength) { // If there is sequence to load
-        currDbSeqIdx = nextDbSeqIdx;
-        currDbSeqPos = db[nextDbSeqIdx];
-        currDbSeqLength = dbSeqLengths[nextDbSeqIdx];
-        nextDbSeqIdx++;
-        return true;
-    } else { // If there are no more sequences to load, load "null" sequence
-        currDbSeqIdx = currDbSeqLength = -1; // Set to -1 if there are no more sequences
-        currDbSeqPos = 0;
-        return false;
-    }
-    }*/
+
 
 template<class SIMD>
-static inline bool loadNextSequence(const int endedSeqSimdIdx, int &nextSeqIdx, const int queryLength,
+static inline bool loadNextSequence(const int endedSeqSimdIdx, int &nextSeqIdx, const int queryLength, const int scores[],
                                     int currDbSeqsIdxs[], unsigned char* currDbSeqsPos[], int currDbSeqsResiduesLeft[],
                                     unsigned char** db, const int dbLength, const int dbSeqLengths[],
-                                    DbSeqSearchState &nextSeqState,
+                                    DbSeqSearchState seqStates[],
                                     __m128i prevHs[], __m128i prevEs[], __m128i &maxH) {
+    while (scores[nextSeqIdx] != SWIMD_SCORE_UNKNOWN && nextSeqIdx < dbLength) // Skip already calculated sequences.
+        nextSeqIdx++;
     if (nextSeqIdx < dbLength) { // If there is sequence to load
+        DbSeqSearchState* nextSeqState = seqStates + nextSeqIdx;
+
         // Set data needed to track the sequence
         currDbSeqsIdxs[endedSeqSimdIdx] = nextSeqIdx;
-        if (!nextSeqState.isSet) {
+        if (!nextSeqState->isSet) {
             currDbSeqsPos[endedSeqSimdIdx] = db[nextSeqIdx];
             currDbSeqsResiduesLeft[endedSeqSimdIdx] = dbSeqLengths[nextSeqIdx];
         } else {
-            currDbSeqsPos[endedSeqSimdIdx] = nextSeqState.currSeqElement;
-            currDbSeqsResiduesLeft[endedSeqSimdIdx] = nextSeqState.numResiduesLeft;
+            currDbSeqsPos[endedSeqSimdIdx] = nextSeqState->currSeqElement;
+            currDbSeqsResiduesLeft[endedSeqSimdIdx] = nextSeqState->numResiduesLeft;
         }
         
         // ------------ Set prevHs, prevEs and maxH ------------- //
@@ -352,46 +351,27 @@ static inline bool loadNextSequence(const int endedSeqSimdIdx, int &nextSeqIdx, 
         for (int r = 0; r < queryLength; r++) {
             // Set prevHs[r][endedSeqSimIdx]
             prevHs[r] = _mm_and_si128(prevHs[r], resetMask); // Set to 0
-            if (nextSeqState.isSet) {
-                allZero[endedSeqSimdIdx] = nextSeqState.prevHs[r];
-                __m128i newH = _mm_load_si128((__m128i const*)allZero);
-                prevHs[r] = SIMD::add(prevHs[r], newH);
+            if (nextSeqState->isSet) {
+                allZero[endedSeqSimdIdx] = (typename SIMD::type)nextSeqState->prevHs[r];
+                prevHs[r] = SIMD::add(prevHs[r], _mm_load_si128((__m128i const*)allZero));
                 allZero[endedSeqSimdIdx] = 0;
             }
             // Set prevEs[r][endedSeqSimIdx]
             prevEs[r] = _mm_and_si128(prevEs[r], resetMask); // Set to 0
-            if (nextSeqState.isSet) {
-                allZero[endedSeqSimdIdx] = nextSeqState.prevEs[r];
-                __m128i newE = _mm_load_si128((__m128i const*)allZero);
-                prevEs[r] = SIMD::add(prevEs[r], newE);
+            if (nextSeqState->isSet) {
+                allZero[endedSeqSimdIdx] = (typename SIMD::type)nextSeqState->prevEs[r];
+                prevEs[r] = SIMD::add(prevEs[r], _mm_load_si128((__m128i const*)allZero));
                 allZero[endedSeqSimdIdx] = 0;
             }
-            typename SIMD::type* unpackedHs = (typename SIMD::type *)&prevHs;
-            typename SIMD::type* unpackedEs = (typename SIMD::type *)&prevEs;
-        }
-
-        for (int r = 0; r < queryLength; r++) {
-            typename SIMD::type* unpackedHs = (typename SIMD::type *)&prevHs[r];
-            typename SIMD::type* unpackedEs = (typename SIMD::type *)&prevEs[r];
-            printf("Hs[%2d]: ", r);
-            for (int i = 0; i < SIMD::numSeqs; i++)
-                printf("%3d ", unpackedHs[i]);
-            printf("\n");
-            printf("Es[%2d]: ", r);
-            for (int i = 0; i < SIMD::numSeqs; i++)
-                printf("%3d ", unpackedEs[i]);
-            printf("\n");
         }
 
         // Set maxH to 0.
         maxH = _mm_and_si128(maxH, resetMask);
-        typename SIMD::type* unpackedMaxH = (typename SIMD::type *)&maxH;
         // ------------------------------------------------------ //
 
         nextSeqIdx++;
         return true;
     } else { // If there are no more sequences to load, load "null" sequence
-        printf("loadam null\n");
         currDbSeqsIdxs[endedSeqSimdIdx] = -1;
         currDbSeqsResiduesLeft[endedSeqSimdIdx] = -1;
         currDbSeqsPos[endedSeqSimdIdx] = 0; // NULL
@@ -407,27 +387,42 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
     return SWIMD_ERR_NO_SIMD_SUPPORT;
     #endif
 
-    DbSeqSearchState seqStates[dbLength];
+    for (int i = 0; i < dbLength; i++)
+        scores[i] = SWIMD_SCORE_UNKNOWN;
+
+    DbSeqSearchState* seqStates = new DbSeqSearchState[dbLength];
     for (int i = 0; i < dbLength; i++)
         seqStates[i] = DbSeqSearchState();
 
     int resultCode;
+
+    clock_t start, finish;
+    start = clock();
     resultCode = swimdSearchDatabase_< Simd<char> >(query, queryLength, 
                                                     db, dbLength, dbSeqLengths, 
                                                     gapOpen, gapExt, scoreMatrix, alphabetLength, 
                                                     scores, seqStates);
+    finish = clock();
+    printf("Cpu time for 8bit: %lf\n", ((double)(finish-start))/CLOCKS_PER_SEC);
     if (resultCode != 0) {
+        start = clock();
 	    resultCode = swimdSearchDatabase_< Simd<short> >(query, queryLength, 
                                                          db, dbLength, dbSeqLengths,
                                                          gapOpen, gapExt, scoreMatrix, alphabetLength,
                                                          scores, seqStates);
+        finish = clock();
+        printf("Cpu time for 16bit: %lf\n", ((double)(finish-start))/CLOCKS_PER_SEC);
 	    if (resultCode != 0) {
+            start = clock();
 	        resultCode = swimdSearchDatabase_< Simd<int> >(query, queryLength, 
                                                            db, dbLength, dbSeqLengths,
                                                            gapOpen, gapExt, scoreMatrix, alphabetLength,
                                                            scores, seqStates);
+            finish = clock();
+            printf("Cpu time for 32bit: %lf\n", ((double)(finish-start))/CLOCKS_PER_SEC);
         }
     }
 
+    delete[] seqStates;
     return resultCode;
 }

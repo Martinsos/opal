@@ -3,7 +3,6 @@
 #include <ctime>
 #include <new>
 #include <algorithm>
-#include <ctime>
 
 #include "Swimd.h"
 
@@ -25,16 +24,16 @@ int main() {
     int gapExt = 1;
 
     // Create random query
-    int queryLength = 20;
+    int queryLength = 300;
     unsigned char query[queryLength];
     fillRandomly(query, queryLength, alphabetLength);
 
     // Create random database
-    int dbLength = 19;
+    int dbLength = 5000;
     unsigned char * db[dbLength];
     int dbSeqsLengths[dbLength];
     for (int i = 0; i < dbLength; i++) {
-        dbSeqsLengths[i] = 10 + rand()%20;
+        dbSeqsLengths[i] = 500 + rand()%100;
         db[i] = new unsigned char[dbSeqsLengths[i]];
         fillRandomly(db[i], dbSeqsLengths[i], alphabetLength);
     }

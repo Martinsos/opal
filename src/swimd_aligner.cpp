@@ -38,7 +38,7 @@ int main(int argc, char * const argv[]) {
         fprintf(stderr, "\n");
         fprintf(stderr, "Usage: swimd_aligner [options...] <query.fasta> <db.fasta>\n");        
         fprintf(stderr, "Options:\n");
-        fprintf(stderr, "\t-go N\tN is gap opening penalty. [default: 3]\n");
+        fprintf(stderr, "\t-o N\tN is gap opening penalty. [default: 3]\n");
         fprintf(stderr, "\t-e N\tN is gap extension penalty. [default: 1]\n");
         fprintf(stderr, "\t-m Blosum50\tScore matrix to be used. [default: Blosum50]\n"); 
         fprintf(stderr, "\t-f FILE\tFILE contains score matrix and some additional data. Overrides -m.\n");
