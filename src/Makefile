@@ -1,10 +1,13 @@
 CC = g++
 # -march=native will compile for correct simd
-CFLAGS = -march=native -O3
+CFLAGS = -march=native
 
 DEBUG ?= 0
 ifeq ($(DEBUG), 1)
 	CFLAGS += -g
+endif
+ifeq ($(DEBUG), 0)
+	CFLAGS += -O3
 endif
 
 all: test swimd_aligner

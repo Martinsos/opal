@@ -25,16 +25,16 @@ int main() {
     int gapExt = 1;
 
     // Create random query
-    int queryLength = 300;
+    int queryLength = 20;
     unsigned char query[queryLength];
     fillRandomly(query, queryLength, alphabetLength);
 
     // Create random database
-    int dbLength = 5000;
+    int dbLength = 19;
     unsigned char * db[dbLength];
     int dbSeqsLengths[dbLength];
     for (int i = 0; i < dbLength; i++) {
-        dbSeqsLengths[i] = 150 + rand()%200;
+        dbSeqsLengths[i] = 10 + rand()%20;
         db[i] = new unsigned char[dbSeqsLengths[i]];
         fillRandomly(db[i], dbSeqsLengths[i], alphabetLength);
     }
