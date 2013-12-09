@@ -170,14 +170,14 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
     while (numEndedDbSeqs < numSeqsToCalculate) {
         // ------------------------ LOAD NEW SEQUENCES -------------------------- //
         for (int i = 0; i < SIMD::numSeqs; i++)
-            if (toBeLoaded[i])
+            if (toBeLoaded[i]) {
                 loadNextSequence<SIMD>(i, nextDbSeqIdx, queryLength, scores,
                                        currDbSeqsIdxs, currDbSeqsPos, currDbSeqsResiduesLeft,
                                        db, dbLength, dbSeqLengths,
                                        seqStates,
                                        prevHs, prevEs, maxH);
-        for (int i = 0; i < SIMD::numSeqs; i++)
-            toBeLoaded[i] = false;
+                toBeLoaded[i] = false;
+            }
         // ---------------------------------------------------------------------- //
 
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
@@ -195,11 +195,9 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
         }
         // ---------------------------------------------------------------------- //
 	
-        // Previous cells: u - up, l - left, ul - up left
-        __m128i uF, uH, ulH; 
-        uF = uH = ulH = SIMD::set1(0); // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
-
-        __m128i minUlH_P = SIMD::set1(0); // Used for detecting the overflow when there is no saturation arithmetic
+        __m128i uF, uH, ulH; // Previous cells: u - up, l - left, ul - up left
+        uF = uH = ulH = zeroes; // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
+        __m128i minUlH_P = zeroes; // Used for detecting the overflow when there is no saturation arithmetic
 
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
@@ -390,6 +388,9 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
     time8 = time16 = time32 = 0;
 
     const int chunkSize = 1024;
+
+    // TODO: If query is too big then too much memory would be allocated!
+    //       To solve that make chunks smaller, if too small then turn off the state saving.
 
     DbSeqSearchState* seqStates = new DbSeqSearchState[chunkSize];
     for (int i = 0; i < chunkSize; i++)
