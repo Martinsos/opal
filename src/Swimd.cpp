@@ -60,7 +60,6 @@ struct Simd<int> {
 struct DbSeqSearchState {
     int* prevHs; // Has length of query.
     int* prevEs; // Has length of query.
-    unsigned char* currSeqElement;
     int numResiduesLeft;
     bool isSet; // True if contents are set, false if state is unset.
 
@@ -144,36 +143,43 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
         if(scores[i] == SWIMD_SCORE_UNKNOWN)
             numSeqsToCalculate++;
 
-    __m128i zeroes = SIMD::set1(0); // Useful
-
     //// --- Data for tracking sequences "loaded" in simd register --- //
     int nextDbSeqIdx = 0; // index in db
     int currDbSeqsIdxs[SIMD::numSeqs]; // index in db for each current database sequence
     unsigned char* currDbSeqsPos[SIMD::numSeqs]; // current element for each current database sequence
     int currDbSeqsResiduesLeft[SIMD::numSeqs];
     int numEndedDbSeqs = 0; // Number of sequences that ended
+    // toBeLoaded[i] is true if corresponding SIMD field is to be loaded with new sequence.
+    bool toBeLoaded[SIMD::numSeqs];
+    for (int i = 0; i < SIMD::numSeqs; i++)
+        toBeLoaded[i] = true;
     //// ------------------------------------------------------------- //
     
-    __m128i Q = SIMD::set1(gapOpen);
-    __m128i R = SIMD::set1(gapExt);
+    const __m128i zeroes = SIMD::set1(0);
+    const __m128i Q = SIMD::set1(gapOpen);
+    const __m128i R = SIMD::set1(gapExt);
     __m128i Hs1[queryLength]; __m128i* prevHs = Hs1;
     __m128i Es1[queryLength]; __m128i* prevEs = Es1;
     __m128i Hs2[queryLength]; __m128i* newHs = Hs2;
     __m128i Es2[queryLength]; __m128i* newEs = Es2;
     __m128i maxH;  // Best score in sequence
-
-    // Load new sequences.
-    for (int i = 0; i < SIMD::numSeqs; i++)
-        loadNextSequence<SIMD>(i, nextDbSeqIdx, queryLength, scores,
-                               currDbSeqsIdxs, currDbSeqsPos, currDbSeqsResiduesLeft,
-                               db, dbLength, dbSeqLengths,
-                               seqStates,
-                               prevHs, prevEs, maxH);
     // ------------------------------------------------------------------ //
 
 
     // For each column
     while (numEndedDbSeqs < numSeqsToCalculate) {
+        // ------------------------ LOAD NEW SEQUENCES -------------------------- //
+        for (int i = 0; i < SIMD::numSeqs; i++)
+            if (toBeLoaded[i])
+                loadNextSequence<SIMD>(i, nextDbSeqIdx, queryLength, scores,
+                                       currDbSeqsIdxs, currDbSeqsPos, currDbSeqsResiduesLeft,
+                                       db, dbLength, dbSeqLengths,
+                                       seqStates,
+                                       prevHs, prevEs, maxH);
+        for (int i = 0; i < SIMD::numSeqs; i++)
+            toBeLoaded[i] = false;
+        // ---------------------------------------------------------------------- //
+
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
         __m128i P[alphabetLength];
@@ -231,11 +237,6 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
 
         typename SIMD::type* unpackedMaxH = (typename SIMD::type*)&maxH;
 
-        bool isSeqEnded[SIMD::numSeqs]; // isSeqEnded[i] is true if corresponding sequence ended.
-        for (int i = 0; i < SIMD::numSeqs; i++)
-            isSeqEnded[i] = false;
-
-
         // ------------------------ OVERFLOW DETECTION -------------------------- //
         int overflowedSimdIdxs[SIMD::numSeqs]; // Indexes of simd registers that overflowed
         int numOverflowedCurrSeqs = 0; // Number of current database sequences that overflowed
@@ -271,41 +272,30 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
                 seqState->prevHs[r] = unpackedPrevHs[simdIdx];
                 seqState->prevEs[r] = unpackedPrevEs[simdIdx];
             }
-            seqState->currSeqElement = currDbSeqsPos[simdIdx];
             seqState->numResiduesLeft = currDbSeqsResiduesLeft[simdIdx];
             // Mark sequence as ended.
-            isSeqEnded[simdIdx] = true;
+            toBeLoaded[simdIdx] = true;
             numEndedDbSeqs++;            
         }
         // ---------------------------------------------------------------------- //
 
         // Update number of residues left and handle finished sequences
         for (int i = 0; i < SIMD::numSeqs; i++)
-            if (currDbSeqsPos[i] != 0 && !isSeqEnded[i]) { // If not null sequence and not ended (by overflow)
+            if (currDbSeqsPos[i] != 0 && !toBeLoaded[i]) { // If not null sequence and not ended (by overflow)
                 currDbSeqsResiduesLeft[i]--;
                 if (currDbSeqsResiduesLeft[i] == 0) { // If sequence is finished
                     // Handle finished sequence
                     scores[currDbSeqsIdxs[i]] = unpackedMaxH[i]; // Save best sequence score.
-                    isSeqEnded[i] = true; // Mark sequence as ended.
+                    toBeLoaded[i] = true; // Mark sequence as ended.
                     numEndedDbSeqs++;
                     // Unset the state
                     seqStates[currDbSeqsIdxs[i]].unset();
                 }
             }
-                            
-        // Load new sequences on place of those that ended.
-        for (int i = 0; i < SIMD::numSeqs; i++)
-            if (isSeqEnded[i]) {
-                loadNextSequence<SIMD>(i, nextDbSeqIdx, queryLength, scores,
-                                       currDbSeqsIdxs, currDbSeqsPos, currDbSeqsResiduesLeft,
-                                       db, dbLength, dbSeqLengths,
-                                       seqStates,
-                                       newHs, newEs, maxH);
-            }   
 
-        // Move for one place in all sequences that were not just loaded (that did not end) and are not null.
+        // Move for one place in all sequences that are not to be loaded (that did not end) and are not null.
         for (int i = 0; i < SIMD::numSeqs; i++)
-            if (currDbSeqsPos[i] != 0 && !isSeqEnded[i])
+            if (currDbSeqsPos[i] != 0 && !toBeLoaded[i])
                 currDbSeqsPos[i]++;
 
         // Swap prevHs with Hs and prevEs with Es
@@ -338,7 +328,7 @@ static inline bool loadNextSequence(const int endedSeqSimdIdx, int &nextSeqIdx, 
             currDbSeqsPos[endedSeqSimdIdx] = db[nextSeqIdx];
             currDbSeqsResiduesLeft[endedSeqSimdIdx] = dbSeqLengths[nextSeqIdx];
         } else {
-            currDbSeqsPos[endedSeqSimdIdx] = nextSeqState->currSeqElement;
+            currDbSeqsPos[endedSeqSimdIdx] = db[nextSeqIdx] + (dbSeqLengths[nextSeqIdx] - nextSeqState->numResiduesLeft);
             currDbSeqsResiduesLeft[endedSeqSimdIdx] = nextSeqState->numResiduesLeft;
         }
         
@@ -396,17 +386,18 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
     for (int i = 0; i < dbLength; i++)
         scores[i] = SWIMD_SCORE_UNKNOWN;
 
-    int resultCode = SWIMD_ERR_UNKNOWN;
-
     double time8, time16, time32;
     time8 = time16 = time32 = 0;
 
-    int chunkSize = 1024;
+    const int chunkSize = 1024;
 
     DbSeqSearchState* seqStates = new DbSeqSearchState[chunkSize];
     for (int i = 0; i < chunkSize; i++)
         seqStates[i] = DbSeqSearchState();
 
+    int resultCode = SWIMD_ERR_UNKNOWN;
+
+    // Solve chunk by chunk and reuse seqStates: This way much less memory for seqStates is allocated.
     for (int chunkStart = 0; chunkStart < dbLength; chunkStart += chunkSize) {
         int dbChunkLength = std::min(chunkSize, dbLength - chunkStart);
 
