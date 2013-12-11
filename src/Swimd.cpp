@@ -350,6 +350,8 @@ static inline bool loadNextSequence(const int endedSeqSimdIdx, int &nextSeqIdx, 
                 prevHs[r] = SIMD::add(prevHs[r], _mm_load_si128((__m128i const*)allZero));
                 allZero[endedSeqSimdIdx] = 0;
             }
+        }
+        for (int r = 0; r < queryLength; r++) {
             // Set prevEs[r][endedSeqSimIdx]
             prevEs[r] = _mm_and_si128(prevEs[r], resetMask); // Set to 0
             if (nextSeqState->isSet) {
