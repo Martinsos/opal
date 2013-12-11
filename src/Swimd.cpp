@@ -149,9 +149,9 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
 	
         // Previous cells: u - up, l - left, ul - up left
         __m128i uF, uH, ulH; 
-        uF = uH = ulH = SIMD::set1(0); // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
+        uF = uH = ulH = zeroes; // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
 
-        __m128i minUlH_P = SIMD::set1(0); // Used for detecting the overflow when there is no saturation arithmetic
+        __m128i minUlH_P = zeroes; // Used for detecting the overflow when there is no saturation arithmetic
 	
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
@@ -232,10 +232,10 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
             }
             // Reset prevEs, prevHs and maxH
             __m128i resetMaskPacked = _mm_load_si128((__m128i const*)resetMask);
-            for (int i = 0; i < queryLength; i++) {
+            for (int i = 0; i < queryLength; i++)
                 prevEs[i] = _mm_and_si128(prevEs[i], resetMaskPacked);
+            for (int i = 0; i < queryLength; i++)
                 prevHs[i] = _mm_and_si128(prevHs[i], resetMaskPacked);
-            }
             maxH = _mm_and_si128(maxH, resetMaskPacked);
 
             columnsSinceLastSeqEnd = 0;
