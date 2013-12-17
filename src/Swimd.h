@@ -33,6 +33,8 @@ extern "C" {
 #define SWIMD_ERR_OVERFLOW 1 //!< Returned when score overflow happens.
 #define SWIMD_ERR_NO_SIMD_SUPPORT 2 //!< Returned if available SIMD is not SSE4.1 or higher.
 
+#define SWIMD_SCORE_UNDEFINED -1
+
 /**
  * Compares query sequence with each database sequence and returns similarity scores.
  * Sequences are not represented as arrays of letters, but as arrays of indices of letters in alphabet.

@@ -55,12 +55,12 @@ struct Simd<int> {
 
 
 static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char * &currDbSeqPos, 
-                             int &currDbSeqLength, unsigned char ** db, int dbSeqLengths[]);
+                             int &currDbSeqLength, unsigned char ** db, int dbSeqLengths[], int * scores);
 
 
 // For debugging
 template<class SIMD>
-void print_mm128i(__m128i mm) {
+static void print_mm128i(__m128i mm) {
     typename SIMD::type* unpacked = (typename SIMD::type *)&mm;
     for (int i = 0; i < SIMD::numSeqs; i++)
         printf("%d ", unpacked[i]);
@@ -102,9 +102,6 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
 
 
     // ------------------------ INITIALIZATION -------------------------- //
-    for (int i = 0; i < dbLength; i++)
-        scores[i] = -1;
-
     __m128i zeroes = SIMD::set1(0);
     __m128i scoreZeroes; // 0 normally, but lower bound if using negative range
     if (SIMD::negRange)
@@ -118,15 +115,26 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
     int currDbSeqsLengths[SIMD::numSeqs];
     int shortestDbSeqLength = -1;  // length of shortest sequence among current database sequences
     int numEndedDbSeqs = 0; // Number of sequences that ended
+    int numActiveChannels = 0; // Number of cells in simd register being used, when it drops to 0 calculation is done.
+
+    bool thereWasOverflow = false; // True if there was at least one overflow in total
+    bool overflowed[SIMD::numSeqs]; // True if sequence overflowed
+    bool thereIsOverflow = false; // True if there is at least one current sequence that overflowed
+    for (int i = 0; i < SIMD::numSeqs; i++)
+        overflowed[i] = false;
 
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++)
         if (loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
-                             currDbSeqsLengths[i], db, dbSeqLengths)) {
+                             currDbSeqsLengths[i], db, dbSeqLengths, scores)) {
+            numActiveChannels++;
             // Update shortest sequence length if new sequence was loaded
             if (shortestDbSeqLength == -1 || currDbSeqsLengths[i] < shortestDbSeqLength)
                 shortestDbSeqLength = currDbSeqsLengths[i];
-        }
+        } else
+            break;
+    if (numActiveChannels == 0) // Just in case database with length 0 was given
+        return 0;
 
     // Q is gap open penalty, R is gap ext penalty.
     __m128i Q = SIMD::set1(gapOpen);
@@ -146,7 +154,7 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
 
     int columnsSinceLastSeqEnd = 0;
     // For each column
-    while (numEndedDbSeqs < dbLength) {	
+    while (true) {	
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
         __m128i P[alphabetLength];
@@ -217,51 +225,59 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
             typename SIMD::type* unpackedOfTest = (typename SIMD::type *)&ofTest;
             for (int i = 0; i < SIMD::numSeqs; i++)
                 if (currDbSeqsPos[i] != 0 && unpackedOfTest[i] <= LOWER_BOUND/2)
-                    return 1;
+                    overflowed[i] = thereIsOverflow = true;
         } else {
             if (SIMD::negRange) {
                 // Since I use saturation, I check if minUlH_P was non negative
                 typename SIMD::type* unpackedOfTest = (typename SIMD::type *)&ofTest;
                 for (int i = 0; i < SIMD::numSeqs; i++)
                     if (currDbSeqsPos[i] != 0 && unpackedOfTest[i] >= 0)
-                        return 1;
+                        overflowed[i] = thereIsOverflow = true;
             } else {
                 // I check if upper bound is reached
                 for (int i = 0; i < SIMD::numSeqs; i++)
                     if (currDbSeqsPos[i] != 0 && unpackedMaxH[i] == UPPER_BOUND) {
-                        return 1;
+                        overflowed[i] = thereIsOverflow = true;
                     }
             }
         }
         // ---------------------------------------------------------------------- //
 
         // --------------------- CHECK AND HANDLE SEQUENCE END ------------------ //
-        if (shortestDbSeqLength == columnsSinceLastSeqEnd) { // If at least one sequence ended
+        if (thereIsOverflow || shortestDbSeqLength == columnsSinceLastSeqEnd) { // If at least one sequence ended
             shortestDbSeqLength = -1;
             typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(16)));
 
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 if (currDbSeqsPos[i] != 0) { // If not null sequence
                     currDbSeqsLengths[i] -= columnsSinceLastSeqEnd;
-                    if (currDbSeqsLengths[i] == 0) { // If sequence ended
+                    if (currDbSeqsLengths[i] == 0 || overflowed[i]) { // If sequence ended
                         numEndedDbSeqs++;
-                        // Save best sequence score
-                        scores[currDbSeqsIdxs[i]] = unpackedMaxH[i];
-                        if (SIMD::negRange)
-                            scores[currDbSeqsIdxs[i]] -= LOWER_BOUND;
+                        if (overflowed[i]) {
+                            thereWasOverflow = true;
+                            overflowed[i] = false;
+                        } else { // Save best sequence score
+                            scores[currDbSeqsIdxs[i]] = unpackedMaxH[i];
+                            if (SIMD::negRange)
+                                scores[currDbSeqsIdxs[i]] -= LOWER_BOUND;
+                        }
                         // Load next sequence
-                        loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
-                                         currDbSeqsLengths[i], db, dbSeqLengths);
-                        if (SIMD::negRange)
-                            resetMask[i] = LOWER_BOUND; //Sets to LOWER_BOUND when used with saturated add and value < 0
-                        else
-                            resetMask[i] = 0; // Sets to zero when used with and
+                        bool loaded = loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
+                                                       currDbSeqsLengths[i], db, dbSeqLengths, scores);
+                        if (!loaded) {
+                             numActiveChannels--;
+                             // End function if there are no more sequences to be calculated
+                             if (numActiveChannels == 0) {
+                                 printf("Seqs ended: %d\n", numEndedDbSeqs);
+                                 if (thereWasOverflow)
+                                     return SWIMD_ERR_OVERFLOW;
+                                 else
+                                     return 0;
+                             }
+                        }
+                        resetMask[i] = SIMD::negRange ? LOWER_BOUND : 0;
                     } else {
-                        if (SIMD::negRange)
-                            resetMask[i] = 0; // Does not change anything when used with saturated add
-                        else
-                            resetMask[i] = -1; // All 1s, does not change anything when used with and
-                            
+                        resetMask[i] = SIMD::negRange ? 0 : -1;                            
                         if (currDbSeqsPos[i] != 0)
                             currDbSeqsPos[i]++; // If not new and not null, move for one element
                     }
@@ -286,6 +302,7 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
                 maxH = _mm_and_si128(maxH, resetMaskPacked);
             }
             columnsSinceLastSeqEnd = 0;
+            thereIsOverflow = false;
         } else { // If no sequences ended
             // Move for one element in all sequences
             for (int i = 0; i < SIMD::numSeqs; i++)
@@ -295,11 +312,13 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
         // ---------------------------------------------------------------------- //
     }
 
-    return 0;
+    return 0; // This line should not be reached
 }
 
 static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char* &currDbSeqPos, 
-                                    int &currDbSeqLength, unsigned char** db, int dbSeqLengths[]) {
+                                    int &currDbSeqLength, unsigned char** db, int dbSeqLengths[], int* scores) {
+    while (scores[nextDbSeqIdx] != SWIMD_SCORE_UNDEFINED && nextDbSeqIdx < dbLength) // skip already calculated sequences
+        nextDbSeqIdx++;
     if (nextDbSeqIdx < dbLength) { // If there is sequence to load
         currDbSeqIdx = nextDbSeqIdx;
         currDbSeqPos = db[nextDbSeqIdx];
@@ -321,7 +340,8 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
     return SWIMD_ERR_NO_SIMD_SUPPORT;
     #endif
 
-    // TODO: initialize scores in advance and keep the results.
+    for (int i = 0; i < dbLength; i++)
+        scores[i] = SWIMD_SCORE_UNDEFINED;
 
     int resultCode;
     printf("Using char\n");
