@@ -42,7 +42,7 @@ int main(int argc, char * const argv[]) {
     fillRandomly(query, queryLength, alphabetLength);
 
     // Create random database
-    int dbLength = 5000;
+    int dbLength = 500;
     unsigned char * db[dbLength];
     int dbSeqsLengths[dbLength];
     for (int i = 0; i < dbLength; i++) {
@@ -75,13 +75,14 @@ int main(int argc, char * const argv[]) {
     start = clock();
     int scores[dbLength];
     int resultCode;
-    if (!strcmp(mode, "SW")) {
+    /*if (!strcmp(mode, "SW")) {
         resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
                                          gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     } else {
         resultCode = swimdSearchDatabaseGlobal(query, queryLength, db, dbLength, dbSeqsLengths, 
                                                gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
-    }
+                                               }*/
+    resultCode = 0;
     finish = clock();
     double time1 = ((double)(finish-start))/CLOCKS_PER_SEC;
     printf("Time: %lf\n", time1);
@@ -191,24 +192,32 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
     int prevEs[queryLength];
 
     const int LOWER_SCORE_BOUND = INT_MIN + gapExt;
+    printf("Mode: %s\n", mode);
 
     for (int seqIdx = 0; seqIdx < dbLength; seqIdx++) {
         // Initialize all values to 0
-        for (int i = 0; i < queryLength; i++) {
-            prevHs[i] = 0;  // Or -gapOpen - i * gapExt if bounded
-            prevEs[i] = LOWER_SCORE_BOUND;
+        for (int r = 0; r < queryLength; r++) {
+            // Query has fixed start and end if not OV
+            prevHs[r] = !strcmp(mode, "OV") ? 0 : -1 * gapOpen - r * gapExt;
+            prevEs[r] = LOWER_SCORE_BOUND;
         }
         int maxLastRowH = INT_MIN;
 
         int maxH; // max H in column
+        int H;
         for (int c = 0; c < dbSeqLengths[seqIdx]; c++) {
             int uF, uH, ulH;
-            int H;
             uF = LOWER_SCORE_BOUND;
-            uH = 0;
-            ulH = 0; // TODO: Set it specially to zero for first cell of first column
+            if (!strcmp(mode, "NW")) { // Database sequence has fixed start and end only in NW
+                uH = -1 * gapOpen - c * gapExt;
+                ulH = uH + gapExt;
+            } else {
+                uH = ulH = 0;
+            }
+            if (c == 0)
+                ulH = 0;
+            
             maxH = INT_MIN;
-
             for (int r = 0; r < queryLength; r++) {
                 int E = max(prevHs[r] - gapOpen, prevEs[r] - gapExt);
                 int F = max(uH - gapOpen, uF - gapExt);
@@ -224,8 +233,11 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
             }
             maxLastRowH = max(maxLastRowH, H);
         }
-	
-        scores[seqIdx] = max(maxLastRowH, maxH);
+        
+        if (!strcmp(mode, "OV")) scores[seqIdx] = max(maxLastRowH, maxH);
+        else if (!strcmp(mode, "HW")) scores[seqIdx] = maxLastRowH;
+        else if (!strcmp(mode, "NW")) scores[seqIdx] = H;  
+        else return 1;
     }
 
     return 0;
