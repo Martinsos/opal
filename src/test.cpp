@@ -4,6 +4,9 @@
 #include <new>
 #include <algorithm>
 #include <ctime>
+#include <climits>
+#include <unistd.h>
+#include <cstring>
 
 #include "Swimd.h"
 
@@ -13,10 +16,19 @@ void fillRandomly(unsigned char* seq, int seqLength, int alphabetLength);
 int * createSimpleScoreMatrix(int alphabetLength, int match, int mismatch);
 int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int dbLength, int dbSeqLengths[],
                 int gapOpen, int gapExt, int * scoreMatrix, int alphabetLength, int scores[]);
+int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db, int dbLength, int dbSeqLengths[],
+                    int gapOpen, int gapExt, int * scoreMatrix, int alphabetLength, int scores[], const char*);
 void printInts(int a[], int aLength);
 int maximum(int a[], int aLength);
 
-int main() {
+int main(int argc, char * const argv[]) {
+
+    char mode[32] = "SW"; // "SW", "NW", "HW" or "OV"
+    int option;
+    if (argc > 1) {
+        strcpy(mode, argv[1]);
+    }
+    
     clock_t start, finish;
     srand(time(NULL));
 
@@ -55,15 +67,21 @@ int main() {
     */
 
     // Create score matrix
-    int * scoreMatrix = createSimpleScoreMatrix(alphabetLength, 3, -1);
+    int * scoreMatrix = createSimpleScoreMatrix(alphabetLength, 2, -1);
 
 	
     // Run Swimd
     printf("Starting Swimd!\n");
     start = clock();
     int scores[dbLength];
-    int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
+    int resultCode;
+    if (!strcmp(mode, "SW")) {
+        resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
                                          gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+    } else {
+        resultCode = swimdSearchDatabaseGlobal(query, queryLength, db, dbLength, dbSeqsLengths, 
+                                               gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+    }
     finish = clock();
     double time1 = ((double)(finish-start))/CLOCKS_PER_SEC;
     printf("Time: %lf\n", time1);
@@ -79,11 +97,16 @@ int main() {
 
 
     // Run normal SW
-    printf("Starting normal SW!\n");
+    printf("Starting normal!\n");
     start = clock();
     int scores2[dbLength];
-    resultCode = calculateSW(query, queryLength, db, dbLength, dbSeqsLengths, 
-                             gapOpen, gapExt, scoreMatrix, alphabetLength, scores2);
+    if (!strcmp(mode, "SW")) {
+        resultCode = calculateSW(query, queryLength, db, dbLength, dbSeqsLengths, 
+                                 gapOpen, gapExt, scoreMatrix, alphabetLength, scores2);
+    } else {
+        resultCode = calculateGlobal(query, queryLength, db, dbLength, dbSeqsLengths, 
+                                     gapOpen, gapExt, scoreMatrix, alphabetLength, scores2, mode);
+    }
     finish = clock();
     double time2 = ((double)(finish-start))/CLOCKS_PER_SEC;
     printf("Time: %lf\n", time2);
@@ -92,7 +115,7 @@ int main() {
     printf("Result: ");
     printInts(scores2, dbLength);
     printf("Maximum: %d\n", maximum(scores2, dbLength));
-	
+    	
 
     // Print differences in results (hopefully there are none!)
     printf("Diff: ");
@@ -101,7 +124,7 @@ int main() {
             printf("%d (%d,%d)  ", i, scores[i], scores2[i]);
         }
     printf("\n");
-
+    
     printf("Times faster: %lf\n", time2/time1);
 
     // Free allocated memory
@@ -157,6 +180,52 @@ int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int
         }
 	
         scores[seqIdx] = maxH;
+    }
+
+    return 0;
+}
+
+int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db, int dbLength, int dbSeqLengths[],
+                    int gapOpen, int gapExt, int * scoreMatrix, int alphabetLength, int scores[], const char* mode) {    
+    int prevHs[queryLength];
+    int prevEs[queryLength];
+
+    const int LOWER_SCORE_BOUND = INT_MIN + gapExt;
+
+    for (int seqIdx = 0; seqIdx < dbLength; seqIdx++) {
+        // Initialize all values to 0
+        for (int i = 0; i < queryLength; i++) {
+            prevHs[i] = 0;  // Or -gapOpen - i * gapExt if bounded
+            prevEs[i] = LOWER_SCORE_BOUND;
+        }
+        int maxLastRowH = INT_MIN;
+
+        int maxH; // max H in column
+        for (int c = 0; c < dbSeqLengths[seqIdx]; c++) {
+            int uF, uH, ulH;
+            int H;
+            uF = LOWER_SCORE_BOUND;
+            uH = 0;
+            ulH = 0; // TODO: Set it specially to zero for first cell of first column
+            maxH = INT_MIN;
+
+            for (int r = 0; r < queryLength; r++) {
+                int E = max(prevHs[r] - gapOpen, prevEs[r] - gapExt);
+                int F = max(uH - gapOpen, uF - gapExt);
+                int score = scoreMatrix[query[r] * alphabetLength + db[seqIdx][c]];
+                H = max(E, max(F, ulH+score));
+                maxH = max(H, maxH);
+                uF = F;
+                uH = H;
+                ulH = prevHs[r];
+		
+                prevHs[r] = H;
+                prevEs[r] = E;
+            }
+            maxLastRowH = max(maxLastRowH, H);
+        }
+	
+        scores[seqIdx] = max(maxLastRowH, maxH);
     }
 
     return 0;

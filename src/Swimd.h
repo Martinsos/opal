@@ -56,6 +56,11 @@ int swimdSearchDatabase(unsigned char query[], int queryLength,
                         int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
                         int scores[]);
 
+int swimdSearchDatabaseGlobal(unsigned char query[], int queryLength, 
+                              unsigned char** db, int dbLength, int dbSeqLengths[],
+                              int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+                              int scores[]);
+    
 #ifdef __cplusplus 
 }
 #endif
