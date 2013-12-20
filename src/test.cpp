@@ -79,8 +79,17 @@ int main(int argc, char * const argv[]) {
         resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
                                          gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     } else {
+        int modeCode;
+        if (!strcmp(mode, "NW")) modeCode = SWIMD_GMODE_NW;
+        else if (!strcmp(mode, "HW")) modeCode = SWIMD_GMODE_HW;
+        else if (!strcmp(mode, "OV")) modeCode = SWIMD_GMODE_OV;
+        else {
+            printf("Invalid mode!\n");
+            return 1;
+        }
+        printf("Mode code: %d\n", modeCode);
         resultCode = swimdSearchDatabaseGlobal(query, queryLength, db, dbLength, dbSeqsLengths, 
-                                               gapOpen, gapExt, scoreMatrix, alphabetLength, scores, SWIMD_GMODE_OV);
+                                               gapOpen, gapExt, scoreMatrix, alphabetLength, scores, modeCode);
     }
     finish = clock();
     double time1 = ((double)(finish-start))/CLOCKS_PER_SEC;

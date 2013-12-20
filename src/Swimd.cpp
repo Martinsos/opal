@@ -451,6 +451,8 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
     int currDbSeqsIdxs[SIMD::numSeqs]; // index in db
     unsigned char* currDbSeqsPos[SIMD::numSeqs]; // current element for each current database sequence
     int currDbSeqsLengths[SIMD::numSeqs];
+    bool justLoaded[SIMD::numSeqs]; // True if sequence was just loaded into channel
+    bool seqJustLoaded = false; // True if at least one sequence was just loaded into channel
     int shortestDbSeqLength = -1;  // length of shortest sequence among current database sequences
     int numEndedDbSeqs = 0; // Number of sequences that ended
 
@@ -458,22 +460,38 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
     for (int i = 0; i < SIMD::numSeqs; i++)
         if (loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
                              currDbSeqsLengths[i], db, dbSeqLengths)) {
+            justLoaded[i] = seqJustLoaded = true;
             // Update shortest sequence length if new sequence was loaded
             if (shortestDbSeqLength == -1 || currDbSeqsLengths[i] < shortestDbSeqLength)
                 shortestDbSeqLength = currDbSeqsLengths[i];
         }
 
     // Q is gap open penalty, R is gap ext penalty.
-    __m128i Q = SIMD::set1(gapOpen);
-    __m128i R = SIMD::set1(gapExt);
+    const __m128i Q = SIMD::set1(gapOpen);
+    const __m128i R = SIMD::set1(gapExt);
 
     // Previous H column (array), previous E column (array), previous F, all signed short
     __m128i prevHs[queryLength];
     __m128i prevEs[queryLength];
     // Initialize all values
-    for (int i = 0; i < queryLength; i++) {
-        prevHs[i] = ZERO_SIMD; // Or -gapOpen - i * gapExt if bounded
-        prevEs[i] = LOWER_SCORE_BOUND_SIMD;
+    for (int r = 0; r < queryLength; r++) {
+        if (MODE == SWIMD_GMODE_OV)
+            prevHs[r] = ZERO_SIMD;
+        else { // - Q - r * R
+            if (r == 0)
+                prevHs[0] = SIMD::sub(ZERO_SIMD, Q);
+            else
+                prevHs[r] = SIMD::sub(prevHs[r-1], R);
+        }
+        
+        prevEs[r] = LOWER_SCORE_BOUND_SIMD;
+    }
+
+    // u - up, ul - up left
+    __m128i uH, ulH;
+    if (MODE == SWIMD_GMODE_NW) {
+        ulH = ZERO_SIMD;
+        uH = SIMD::sub(R, Q); // -Q + R
     }
 
     __m128i maxLastRowH = LOWER_BOUND_SIMD; // Keeps track of maximum H in last row
@@ -498,11 +516,25 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
         }
         // ---------------------------------------------------------------------- //
 	
-        // Previous cells: u - up, l - left, ul - up left
-        __m128i uF, uH, ulH;
-        uF = LOWER_SCORE_BOUND_SIMD;
-        uH = ZERO_SIMD;
-        ulH = ZERO_SIMD; // TODO: take care it is always zero for first row of first column
+        // u - up
+        __m128i uF = LOWER_SCORE_BOUND_SIMD;
+
+        // Database sequence has fixed start and end only in NW
+        if (MODE == SWIMD_GMODE_NW) {
+            if (seqJustLoaded) {
+                typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(16)));
+                for (int i = 0; i < SIMD::numSeqs; i++) 
+                    resetMask[i] = justLoaded[i] ?  0 : -1;
+                const __m128i resetMaskPacked = _mm_load_si128((__m128i const*)resetMask);
+                ulH = _mm_and_si128(uH, resetMaskPacked);
+            } else
+                ulH = uH;
+            
+            uH = SIMD::sub(uH, R); // uH is -Q - c*R
+            // NOTE: Setup of ulH and uH for first column is done when sequence is loaded.
+        } else {
+            uH = ulH = ZERO_SIMD;
+        }
 
         __m128i minE, minF;
         minE = minF = SIMD::set1(UPPER_BOUND);
@@ -524,8 +556,6 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
             H = SIMD::max(H, ulH_P); // Check if H == UPPER_BOUND
 
             maxH = SIMD::max(maxH, H); // update best score in column -> check if maxH == UPPER_BOUND
-            
-            // TODO: TREBA SMISLITI KAKO OVO SVE TEMPLEJTIZIRATI, ZASAD RADIM ZA OV
 
             // Set uF, uH, ulH
             uF = F;
@@ -568,10 +598,10 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
         }
         // ---------------------------------------------------------------------- //
 
-        // --------------------- CHECK AND HANDLE SEQUENCE END ------------------ //
+        seqJustLoaded = false;
+        // --------------------- CHECK AND HANDLE SEQUENCE END ------------------ //        
         if (shortestDbSeqLength == columnsSinceLastSeqEnd) { // If at least one sequence ended
             shortestDbSeqLength = -1;
-            bool reset[SIMD::numSeqs]; // True if channel i should be reseted
 
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 if (currDbSeqsPos[i] != 0) { // If not null sequence
@@ -579,15 +609,21 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
                     if (currDbSeqsLengths[i] == 0) { // If sequence ended
                         numEndedDbSeqs++;
                         // Save best sequence score
-                        __m128i bestScore = SIMD::max(maxH, maxLastRowH); // Maximum of last row and column
+                        __m128i bestScore;
+                        if (MODE == SWIMD_GMODE_OV)
+                            bestScore = SIMD::max(maxH, maxLastRowH); // Maximum of last row and column
+                        if (MODE == SWIMD_GMODE_HW)
+                            bestScore = maxLastRowH;
+                        if (MODE == SWIMD_GMODE_NW)
+                            bestScore = H;
                         typename SIMD::type* unpackedBestScore = (typename SIMD::type *)&bestScore;
                         scores[currDbSeqsIdxs[i]] = unpackedBestScore[i];
                         // Load next sequence
                         loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
                                          currDbSeqsLengths[i], db, dbSeqLengths);
-                        reset[i] = true;
+                        justLoaded[i] = seqJustLoaded = true;
                     } else {
-                        reset[i] = false;
+                        justLoaded[i] = false;
                             
                         if (currDbSeqsPos[i] != 0)
                             currDbSeqsPos[i]++; // If not new and not null, move for one element
@@ -597,33 +633,46 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
                         shortestDbSeqLength = currDbSeqsLengths[i];
                 }
             }
-            //------------ Reset prevEs, prevHs and maxLastRowH ------------//
+            //------------ Reset prevEs, prevHs, maxLastRowH(, ulH and uH) ------------//
             typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(16)));
-            __m128i resetMaskPacked;
+            typename SIMD::type setMask[SIMD::numSeqs] __attribute__((aligned(16))); // inverse of resetMask
+            for (int i = 0; i < SIMD::numSeqs; i++) {
+                resetMask[i] = justLoaded[i] ?  0 : -1;
+                setMask[i]   = justLoaded[i] ? -1 :  0;
+            }
+            const __m128i resetMaskPacked = _mm_load_si128((__m128i const*)resetMask);
+            const __m128i setMaskPacked = _mm_load_si128((__m128i const*)setMask);
 
-            // Reset channels to zero
-            for (int i = 0; i < SIMD::numSeqs; i++)
-                resetMask[i] = reset[i] ? 0 : -1;
-            resetMaskPacked = _mm_load_si128((__m128i const*)resetMask);
+            // Set prevEs ended channels to LOWER_SCORE_BOUND
+            const __m128i maskedLowerScoreBoundSimd = _mm_and_si128(setMaskPacked, LOWER_SCORE_BOUND_SIMD);
             for (int r = 0; r < queryLength; r++) {
                 prevEs[r] = _mm_and_si128(prevEs[r], resetMaskPacked);
-                prevHs[r] = _mm_and_si128(prevHs[r], resetMaskPacked);
+                prevEs[r] = SIMD::add(prevEs[r], maskedLowerScoreBoundSimd);
             }
-            maxLastRowH = _mm_and_si128(maxLastRowH, resetMaskPacked);
 
-            // Add LOWER_SCORE_BOUND to channels
-            for (int i = 0; i < SIMD::numSeqs; i++)
-                resetMask[i] = reset[i] ? LOWER_SCORE_BOUND : 0;
-            resetMaskPacked = _mm_load_si128((__m128i const*)resetMask);
+            // Set prevHs
             for (int r = 0; r < queryLength; r++) {
-                prevEs[r] = SIMD::add(prevEs[r], resetMaskPacked);
+                prevHs[r] = _mm_and_si128(prevHs[r], resetMaskPacked);
+                if (MODE != SWIMD_GMODE_OV) {
+                    if (r == 0) {
+                        prevHs[0] = SIMD::sub(prevHs[0], _mm_and_si128(setMaskPacked, Q));
+                    } else {
+                        prevHs[r] = SIMD::add(prevHs[r], _mm_and_si128(setMaskPacked, SIMD::sub(prevHs[r-1], R)));
+                    }
+                }
             }
 
-            // Add LOWER_BOUND to maxLastRow
-            for (int i = 0; i < SIMD::numSeqs; i++)
-                resetMask[i] = reset[i] ? LOWER_BOUND : 0;
-            resetMaskPacked = _mm_load_si128((__m128i const*)resetMask);
-            maxLastRowH = SIMD::add(maxLastRowH, resetMaskPacked);
+            // Set ulH and uH if NW
+            if (MODE == SWIMD_GMODE_NW) {
+                ulH = _mm_and_si128(ulH, resetMaskPacked); // to 0
+                // Set uH channels to -Q + R
+                uH = _mm_and_si128(uH, resetMaskPacked);
+                uH = SIMD::add(uH, _mm_and_si128(setMaskPacked, SIMD::sub(R, Q)));
+            }
+
+            // Set maxLastRow ended channels to LOWER_BOUND
+            maxLastRowH = _mm_and_si128(maxLastRowH, resetMaskPacked);
+            maxLastRowH = SIMD::add(maxLastRowH, _mm_and_si128(setMaskPacked, LOWER_BOUND_SIMD));
             //-------------------------------------------------------//
 
             columnsSinceLastSeqEnd = 0;
