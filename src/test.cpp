@@ -75,14 +75,13 @@ int main(int argc, char * const argv[]) {
     start = clock();
     int scores[dbLength];
     int resultCode;
-    /*if (!strcmp(mode, "SW")) {
+    if (!strcmp(mode, "SW")) {
         resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
                                          gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     } else {
         resultCode = swimdSearchDatabaseGlobal(query, queryLength, db, dbLength, dbSeqsLengths, 
-                                               gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
-                                               }*/
-    resultCode = 0;
+                                               gapOpen, gapExt, scoreMatrix, alphabetLength, scores, SWIMD_GMODE_OV);
+    }
     finish = clock();
     double time1 = ((double)(finish-start))/CLOCKS_PER_SEC;
     printf("Time: %lf\n", time1);

@@ -400,7 +400,7 @@ struct SimdG<int> {
 
 
 
-template<class SIMD>
+template<class SIMD, int MODE>
 static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength, 
                                       unsigned char** db, int dbLength, int dbSeqLengths[],
                                       int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
@@ -443,10 +443,10 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
     for (int i = 0; i < dbLength; i++)
         scores[i] = -1;
 
-    __m128i zeroes = SIMD::set1(0);
-    __m128i lowerBounds = SIMD::set1(LOWER_BOUND);
-    __m128i lowerScoreBounds = SIMD::set1(LOWER_SCORE_BOUND);
-
+    const __m128i ZERO_SIMD = SIMD::set1(0);
+    const __m128i LOWER_BOUND_SIMD = SIMD::set1(LOWER_BOUND);
+    const __m128i LOWER_SCORE_BOUND_SIMD = SIMD::set1(LOWER_SCORE_BOUND);
+    
     int nextDbSeqIdx = 0; // index in db
     int currDbSeqsIdxs[SIMD::numSeqs]; // index in db
     unsigned char* currDbSeqsPos[SIMD::numSeqs]; // current element for each current database sequence
@@ -472,11 +472,11 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
     __m128i prevEs[queryLength];
     // Initialize all values
     for (int i = 0; i < queryLength; i++) {
-        prevHs[i] = zeroes; // Or -gapOpen - i * gapExt if bounded
-        prevEs[i] = lowerScoreBounds;
+        prevHs[i] = ZERO_SIMD; // Or -gapOpen - i * gapExt if bounded
+        prevEs[i] = LOWER_SCORE_BOUND_SIMD;
     }
 
-    __m128i maxLastRowH = lowerBounds; // Keeps track of maximum H in last row
+    __m128i maxLastRowH = LOWER_BOUND_SIMD; // Keeps track of maximum H in last row
     // ------------------------------------------------------------------ //
 
 
@@ -500,13 +500,13 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
 	
         // Previous cells: u - up, l - left, ul - up left
         __m128i uF, uH, ulH;
-        uF = lowerScoreBounds;
-        uH = zeroes;
-        ulH = zeroes; // TODO: take care it is always zero for first row of first column
+        uF = LOWER_SCORE_BOUND_SIMD;
+        uH = ZERO_SIMD;
+        ulH = ZERO_SIMD; // TODO: take care it is always zero for first row of first column
 
         __m128i minE, minF;
         minE = minF = SIMD::set1(UPPER_BOUND);
-        __m128i maxH = lowerBounds; // Max H in this column
+        __m128i maxH = LOWER_BOUND_SIMD; // Max H in this column
         __m128i H;
 
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
@@ -639,31 +639,53 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
     return 0;
 }
 
-extern int swimdSearchDatabaseGlobal(unsigned char query[], int queryLength, 
-                                     unsigned char** db, int dbLength, int dbSeqLengths[],
-                                     int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                                     int scores[]) {
-    #ifndef __SSE4_1__
+template <int MODE>
+static int swimdSearchDatabaseGlobalTemplated(unsigned char query[], int queryLength, 
+                                              unsigned char** db, int dbLength, int dbSeqLengths[],
+                                              int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+                                              int scores[]) {
+#ifndef __SSE4_1__
     return SWIMD_ERR_NO_SIMD_SUPPORT;
-    #endif
+#endif
 
     int resultCode;
     printf("Using char\n");
-    resultCode = swimdSearchDatabaseGlobal_< SimdG<char> >(query, queryLength, 
-                                                          db, dbLength, dbSeqLengths, 
-                                                          gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+    resultCode = swimdSearchDatabaseGlobal_< SimdG<char>, MODE >
+        (query, queryLength, db, dbLength, dbSeqLengths, 
+         gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     if (resultCode != 0) {
         printf("Using short\n");
-	    resultCode = swimdSearchDatabaseGlobal_< SimdG<short> >(query, queryLength, 
-                                                               db, dbLength, dbSeqLengths,
-                                                               gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+	    resultCode = swimdSearchDatabaseGlobal_< SimdG<short>, MODE >
+            (query, queryLength, db, dbLength, dbSeqLengths,
+             gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
 	    if (resultCode != 0) {
             printf("Using int\n");
-	        resultCode = swimdSearchDatabaseGlobal_< SimdG<int> >(query, queryLength, 
-                                                                 db, dbLength, dbSeqLengths,
-                                                                 gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+	        resultCode = swimdSearchDatabaseGlobal_< SimdG<int>, MODE >
+                (query, queryLength, db, dbLength, dbSeqLengths,
+                 gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
         }
     }
 
     return resultCode;
+}
+
+
+extern int swimdSearchDatabaseGlobal(unsigned char query[], int queryLength, 
+                                     unsigned char** db, int dbLength, int dbSeqLengths[],
+                                     int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+                                     int scores[], const int mode) {
+    if (mode == SWIMD_GMODE_NW) {
+        return swimdSearchDatabaseGlobalTemplated<SWIMD_GMODE_NW>
+            (query, queryLength, db, dbLength, dbSeqLengths, 
+             gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+    } else if (mode == SWIMD_GMODE_HW) {
+        return swimdSearchDatabaseGlobalTemplated<SWIMD_GMODE_HW>
+            (query, queryLength, db, dbLength, dbSeqLengths, 
+             gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+    } else if (mode == SWIMD_GMODE_OV) {
+        return swimdSearchDatabaseGlobalTemplated<SWIMD_GMODE_OV>
+            (query, queryLength, db, dbLength, dbSeqLengths, 
+             gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+    }
+    return SWIMD_ERR_INVALID_GMODE;
 }
