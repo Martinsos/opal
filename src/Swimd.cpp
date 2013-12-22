@@ -436,7 +436,7 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
             }
         }
 
-    // TODO: Check if inital values of H (-gapOpen - i * gapExt) cause overflow
+    // TODO: If not saturated arithmetic check if inital values of H (-gapOpen - i * gapExt) cause overflow
     // ------------------------------------------------------------------ //
 
 
@@ -543,12 +543,12 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
         __m128i maxH = LOWER_BOUND_SIMD; // Max H in this column
         __m128i H;
 
-        __m128i firstRow_uH, firstRow_ulH; // Save their values from firstRow
+        __m128i firstRow_uH, firstRow_ulH; // Values of uH and ulH from first row of column
+
         if (MODE == SWIMD_GMODE_NW) {
             firstRow_uH = uH;
             firstRow_ulH = ulH;
         }
- 
         
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
@@ -564,7 +564,7 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
             __m128i ulH_P = SIMD::add(ulH, P[query[r]]); 
             H = SIMD::max(H, ulH_P); // H could overflow
 
-            maxH = SIMD::max(maxH, H); // update best score in column -> check if maxH == UPPER_BOUND
+            maxH = SIMD::max(maxH, H); // update best score in column
 
             // Set uF, uH, ulH
             uF = F;
@@ -578,8 +578,6 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
         // ---------------------------------------------------------------------- //
 
         maxLastRowH = SIMD::max(maxLastRowH, H);
-//        printf("maxLastRowH: "); print_mm128i<SIMD>(maxLastRowH); printf("\n");
-//        printf("maxH: "); print_mm128i<SIMD>(maxH); printf("\n");
 
         if (MODE == SWIMD_GMODE_NW) {
             uH = firstRow_uH;
