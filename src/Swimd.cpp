@@ -61,7 +61,8 @@ static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx,
 // For debugging
 template<class SIMD>
 void print_mm128i(__m128i mm) {
-    typename SIMD::type* unpacked = (typename SIMD::type *)&mm;
+    typename SIMD::type unpacked[SIMD::numSeqs];
+    _mm_store_si128((__m128i*)unpacked, mm);
     for (int i = 0; i < SIMD::numSeqs; i++)
         printf("%d ", unpacked[i]);
 }
@@ -83,7 +84,7 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
     if (!SIMD::satArthm) {
         // These extra limits are enforced so overflow could be detected more efficiently
         if (gapOpen <= LOWER_BOUND/2 || UPPER_BOUND/2 <= gapOpen || gapExt <= LOWER_BOUND/2 || UPPER_BOUND/2 <= gapExt) {
-            return 1;
+            return SWIMD_ERR_OVERFLOW;
         }
     }
 
@@ -91,11 +92,11 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
         for (int c = 0; c < alphabetLength; c++) {
             int score = scoreMatrix[r * alphabetLength + c];
             if (score < LOWER_BOUND || UPPER_BOUND < score) {
-                return 1;
+                return SWIMD_ERR_OVERFLOW;
             }
             if (!SIMD::satArthm) {
                 if (score <= LOWER_BOUND/2 || UPPER_BOUND/2 <= score)
-                    return 1;
+                    return SWIMD_ERR_OVERFLOW;
             }
         }	
     // ------------------------------------------------------------------ //
@@ -207,29 +208,33 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
         // ---------------------------------------------------------------------- //
 
         columnsSinceLastSeqEnd++;
-        typename SIMD::type* unpackedMaxH = (typename SIMD::type *)&maxH;
+
+        typename SIMD::type unpackedMaxH[SIMD::numSeqs];
+        _mm_store_si128((__m128i*)unpackedMaxH, maxH);
 	
         // ------------------------ OVERFLOW DETECTION -------------------------- //
         if (!SIMD::satArthm) {
             // This check is based on following assumptions: 
             //  - overflow wraps
             //  - Q, R and all scores from scoreMatrix are between LOWER_BOUND/2 and UPPER_BOUND/2 exclusive
-            typename SIMD::type* unpackedOfTest = (typename SIMD::type *)&ofTest;
+            typename SIMD::type unpackedOfTest[SIMD::numSeqs];
+            _mm_store_si128((__m128i*)unpackedOfTest, ofTest);
             for (int i = 0; i < SIMD::numSeqs; i++)
                 if (currDbSeqsPos[i] != 0 && unpackedOfTest[i] <= LOWER_BOUND/2)
-                    return 1;
+                    return SWIMD_ERR_OVERFLOW;
         } else {
             if (SIMD::negRange) {
                 // Since I use saturation, I check if minUlH_P was non negative
-                typename SIMD::type* unpackedOfTest = (typename SIMD::type *)&ofTest;
+                typename SIMD::type unpackedOfTest[SIMD::numSeqs];
+                _mm_store_si128((__m128i*)unpackedOfTest, ofTest);
                 for (int i = 0; i < SIMD::numSeqs; i++)
                     if (currDbSeqsPos[i] != 0 && unpackedOfTest[i] >= 0)
-                        return 1;
+                        return SWIMD_ERR_OVERFLOW;
             } else {
                 // I check if upper bound is reached
                 for (int i = 0; i < SIMD::numSeqs; i++)
                     if (currDbSeqsPos[i] != 0 && unpackedMaxH[i] == UPPER_BOUND) {
-                        return 1;
+                        return SWIMD_ERR_OVERFLOW;
                     }
             }
         }
@@ -321,8 +326,6 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
     return SWIMD_ERR_NO_SIMD_SUPPORT;
     #endif
 
-    // TODO: initialize scores in advance and keep the results.
-
     int resultCode;
     printf("Using char\n");
     resultCode = swimdSearchDatabase_< Simd<char> >(query, queryLength, 
@@ -343,8 +346,6 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
 
     return resultCode;
 }
-
-
 
 
 
@@ -527,8 +528,9 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
                     resetMask[i] = justLoaded[i] ?  0 : -1;
                 const __m128i resetMaskPacked = _mm_load_si128((__m128i const*)resetMask);
                 ulH = _mm_and_si128(uH, resetMaskPacked);
-            } else
+            } else {
                 ulH = uH;
+            }
             
             uH = SIMD::sub(uH, R); // uH is -Q - c*R
             // NOTE: Setup of ulH and uH for first column is done when sequence is loaded.
@@ -541,19 +543,26 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
         __m128i maxH = LOWER_BOUND_SIMD; // Max H in this column
         __m128i H;
 
+        __m128i firstRow_uH, firstRow_ulH; // Save their values from firstRow
+        if (MODE == SWIMD_GMODE_NW) {
+            firstRow_uH = uH;
+            firstRow_ulH = ulH;
+        }
+ 
+        
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
             // Calculate E = max(lH-Q, lE-R)
-            __m128i E = SIMD::max(SIMD::sub(prevHs[r], Q), SIMD::sub(prevEs[r], R)); // Should check E == LOWER_BOUND
+            __m128i E = SIMD::max(SIMD::sub(prevHs[r], Q), SIMD::sub(prevEs[r], R)); // E could overflow
 
             // Calculate F = max(uH-Q, uF-R)
-            __m128i F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R)); // Should check F == LOWER_BOUND
+            __m128i F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R)); // F could overflow
             minF = SIMD::min(minF, F); // For overflow detection
 
             // Calculate H
     	    H = SIMD::max(F, E);
             __m128i ulH_P = SIMD::add(ulH, P[query[r]]); 
-            H = SIMD::max(H, ulH_P); // Check if H == UPPER_BOUND
+            H = SIMD::max(H, ulH_P); // H could overflow
 
             maxH = SIMD::max(maxH, H); // update best score in column -> check if maxH == UPPER_BOUND
 
@@ -568,14 +577,23 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
         }
         // ---------------------------------------------------------------------- //
 
+        maxLastRowH = SIMD::max(maxLastRowH, H);
+//        printf("maxLastRowH: "); print_mm128i<SIMD>(maxLastRowH); printf("\n");
+//        printf("maxH: "); print_mm128i<SIMD>(maxH); printf("\n");
+
+        if (MODE == SWIMD_GMODE_NW) {
+            uH = firstRow_uH;
+            ulH = firstRow_ulH;
+        }
+
         // Find minE, which should be checked with minE == LOWER_BOUND for overflow
         for (int r = 0; r < queryLength; r++)
             minE = SIMD::min(minE, prevEs[r]);
 
-        maxLastRowH = SIMD::max(maxLastRowH, H);
-
         columnsSinceLastSeqEnd++;
-        typename SIMD::type* unpackedMaxH = (typename SIMD::type *)&maxH;
+        
+        typename SIMD::type unpackedMaxH[SIMD::numSeqs];
+        _mm_store_si128((__m128i*)unpackedMaxH, maxH);
 	
         // ------------------------ OVERFLOW DETECTION -------------------------- //
         if (!SIMD::satArthm) {
@@ -588,8 +606,9 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
                 return 1;*/
         } else {
             // There is overflow if minE == LOWER_BOUND or minF == LOWER_BOUND or maxH == UPPER_BOUND
-            minE = SIMD::min(minE, minF);
-            typename SIMD::type* unpackedMinEF = (typename SIMD::type *)&minE;
+            __m128i minEF = SIMD::min(minE, minF);
+            typename SIMD::type unpackedMinEF[SIMD::numSeqs];
+            _mm_store_si128((__m128i*)unpackedMinEF, minEF);
             for (int i = 0; i < SIMD::numSeqs; i++)
                 if (currDbSeqsPos[i] != 0)
                     if (unpackedMinEF[i] == LOWER_BOUND || unpackedMaxH[i] == UPPER_BOUND) {
@@ -605,26 +624,30 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
 
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 if (currDbSeqsPos[i] != 0) { // If not null sequence
+                    justLoaded[i] = false;
                     currDbSeqsLengths[i] -= columnsSinceLastSeqEnd;
+                    
+                    // Calculate best scores
+                    __m128i bestScore;
+                    if (MODE == SWIMD_GMODE_OV)
+                        bestScore = SIMD::max(maxH, maxLastRowH); // Maximum of last row and column
+                    if (MODE == SWIMD_GMODE_HW)
+                        bestScore = maxLastRowH;
+                    if (MODE == SWIMD_GMODE_NW)
+                        bestScore = H;
+                    typename SIMD::type unpackedBestScore[SIMD::numSeqs];
+                    _mm_store_si128((__m128i*)unpackedBestScore, bestScore);
+
                     if (currDbSeqsLengths[i] == 0) { // If sequence ended
                         numEndedDbSeqs++;
-                        // Save best sequence score
-                        __m128i bestScore;
-                        if (MODE == SWIMD_GMODE_OV)
-                            bestScore = SIMD::max(maxH, maxLastRowH); // Maximum of last row and column
-                        if (MODE == SWIMD_GMODE_HW)
-                            bestScore = maxLastRowH;
-                        if (MODE == SWIMD_GMODE_NW)
-                            bestScore = H;
-                        typename SIMD::type* unpackedBestScore = (typename SIMD::type *)&bestScore;
+                        // Save best score
                         scores[currDbSeqsIdxs[i]] = unpackedBestScore[i];
                         // Load next sequence
-                        loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
-                                         currDbSeqsLengths[i], db, dbSeqLengths);
-                        justLoaded[i] = seqJustLoaded = true;
+                        if (loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
+                                             currDbSeqsLengths[i], db, dbSeqLengths)) {
+                            justLoaded[i] = seqJustLoaded = true;
+                        }
                     } else {
-                        justLoaded[i] = false;
-                            
                         if (currDbSeqsPos[i] != 0)
                             currDbSeqsPos[i]++; // If not new and not null, move for one element
                     }

@@ -40,7 +40,7 @@ int main(int argc, char * const argv[]) {
     int queryLength = 300;
     unsigned char query[queryLength];
     fillRandomly(query, queryLength, alphabetLength);
-
+    
     // Create random database
     int dbLength = 500;
     unsigned char * db[dbLength];
@@ -51,7 +51,7 @@ int main(int argc, char * const argv[]) {
         fillRandomly(db[i], dbSeqsLengths[i], alphabetLength);
     }
     
-    /*
+    /*  
       printf("Query:\n");
       for (int i = 0; i < queryLength; i++)
       printf("%d ", query[i]);
@@ -67,7 +67,7 @@ int main(int argc, char * const argv[]) {
     */
 
     // Create score matrix
-    int * scoreMatrix = createSimpleScoreMatrix(alphabetLength, 2, -1);
+    int * scoreMatrix = createSimpleScoreMatrix(alphabetLength, 3000, -1);
 
 	
     // Run Swimd
@@ -87,7 +87,6 @@ int main(int argc, char * const argv[]) {
             printf("Invalid mode!\n");
             return 1;
         }
-        printf("Mode code: %d\n", modeCode);
         resultCode = swimdSearchDatabaseGlobal(query, queryLength, db, dbLength, dbSeqsLengths, 
                                                gapOpen, gapExt, scoreMatrix, alphabetLength, scores, modeCode);
     }
@@ -199,8 +198,9 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
     int prevHs[queryLength];
     int prevEs[queryLength];
 
-    const int LOWER_SCORE_BOUND = INT_MIN + gapExt;
     printf("Mode: %s\n", mode);
+    
+    const int LOWER_SCORE_BOUND = INT_MIN + gapExt;
 
     for (int seqIdx = 0; seqIdx < dbLength; seqIdx++) {
         // Initialize all values to 0
@@ -226,6 +226,7 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
                 ulH = 0;
             
             maxH = INT_MIN;
+            
             for (int r = 0; r < queryLength; r++) {
                 int E = max(prevHs[r] - gapOpen, prevEs[r] - gapExt);
                 int F = max(uH - gapOpen, uF - gapExt);
