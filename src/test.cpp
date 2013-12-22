@@ -67,7 +67,7 @@ int main(int argc, char * const argv[]) {
     */
 
     // Create score matrix
-    int * scoreMatrix = createSimpleScoreMatrix(alphabetLength, 3000, -1);
+    int * scoreMatrix = createSimpleScoreMatrix(alphabetLength, 3, -1);
 
 	
     // Run Swimd
