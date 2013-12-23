@@ -322,10 +322,9 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
                                unsigned char** db, int dbLength, int dbSeqLengths[],
                                int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
                                int scores[]) {
-    #ifndef __SSE4_1__
+#ifndef __SSE4_1__
     return SWIMD_ERR_NO_SIMD_SUPPORT;
-    #endif
-
+#else
     int resultCode;
     printf("Using char\n");
     resultCode = swimdSearchDatabase_< Simd<char> >(query, queryLength, 
@@ -345,6 +344,7 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
     }
 
     return resultCode;
+#endif
 }
 
 
@@ -716,8 +716,7 @@ static int swimdSearchDatabaseGlobalTemplated(unsigned char query[], int queryLe
                                               int scores[]) {
 #ifndef __SSE4_1__
     return SWIMD_ERR_NO_SIMD_SUPPORT;
-#endif
-
+#else
     int resultCode;
     printf("Using char\n");
     resultCode = swimdSearchDatabaseGlobal_< SimdG<char>, MODE >
@@ -737,6 +736,7 @@ static int swimdSearchDatabaseGlobalTemplated(unsigned char query[], int queryLe
     }
 
     return resultCode;
+#endif
 }
 
 

@@ -71,6 +71,7 @@ int swimdSearchDatabase(unsigned char query[], int queryLength,
  * For example, if alphabet is {A,C,T,G} and sequence is ACCTCAG it will be represented as 0112103.
  * Opening of gap is penalized with gapOpen, while gap extension is penalized with gapExt.
  * gapOpen, gapExt and scores from scoreMatrix must be in (INT_MIN/2, INT_MAX/2).
+ * Does not detect overflow!
  * @param [in] query Query sequence.
  * @param [in] queryLength Length of query sequence.
  * @param [in] db Array of database sequences (each sequence is also an array).
