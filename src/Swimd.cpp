@@ -323,17 +323,23 @@ extern int searchDatabaseSW(unsigned char query[], int queryLength,
                             int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
                             int scores[]) {
     int resultCode;
-    resultCode = searchDatabaseSW_< SimdSW<char> >(query, queryLength, 
-                                                   db, dbLength, dbSeqLengths, 
-                                                   gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
-    if (resultCode != 0) {
-        resultCode = searchDatabaseSW_< SimdSW<short> >(query, queryLength,
-                                                        db, dbLength, dbSeqLengths,
-                                                        gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+    const int chunkSize = 1024;
+    for (int startIdx = 0; startIdx < dbLength; startIdx += chunkSize) {
+        unsigned char** db_ = db + startIdx;
+        int* dbSeqLengths_ = dbSeqLengths + startIdx; 
+        int dbLength_ = startIdx + chunkSize >= dbLength ? dbLength - startIdx : chunkSize;
+        resultCode = searchDatabaseSW_< SimdSW<char> >(query, queryLength, 
+                                                       db_, dbLength_, dbSeqLengths_, 
+                                                       gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
         if (resultCode != 0) {
-            resultCode = searchDatabaseSW_< SimdSW<int> >(query, queryLength,
-                                                          db, dbLength, dbSeqLengths,
-                                                          gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+            resultCode = searchDatabaseSW_< SimdSW<short> >(query, queryLength,
+                                                            db_, dbLength_, dbSeqLengths_,
+                                                            gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+            if (resultCode != 0) {
+                resultCode = searchDatabaseSW_< SimdSW<int> >(query, queryLength,
+                                                              db_, dbLength_, dbSeqLengths_,
+                                                              gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+            }
         }
     }
 
