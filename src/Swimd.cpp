@@ -98,7 +98,7 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
                 if (score <= LOWER_BOUND/2 || UPPER_BOUND/2 <= score)
                     return SWIMD_ERR_OVERFLOW;
             }
-        }	
+        }
     // ------------------------------------------------------------------ //
 
 
@@ -147,7 +147,7 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
 
     int columnsSinceLastSeqEnd = 0;
     // For each column
-    while (numEndedDbSeqs < dbLength) {	
+    while (numEndedDbSeqs < dbLength) {
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
         __m128i P[alphabetLength];
@@ -162,13 +162,13 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
             P[letter] = _mm_load_si128((__m128i const*)profileRow);
         }
         // ---------------------------------------------------------------------- //
-	
+        
         // Previous cells: u - up, l - left, ul - up left
         __m128i uF, uH, ulH; 
         uF = uH = ulH = scoreZeroes; // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
 
         __m128i ofTest = scoreZeroes; // Used for detecting the overflow when not using saturated ar
-	
+
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
             // Calculate E = max(lH-Q, lE-R)
@@ -178,7 +178,7 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
             __m128i F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R));
 
             // Calculate H
-    	    __m128i H = SIMD::max(F, E);
+            __m128i H = SIMD::max(F, E);
             if (!SIMD::negRange) // If not using negative range, then H could be negative at this moment so we need this
                 H = SIMD::max(H, zeroes);
             __m128i ulH_P = SIMD::add(ulH, P[query[r]]); // If using negative range: if ulH_P >= 0 then we have overflow
@@ -211,7 +211,7 @@ static int swimdSearchDatabase_(unsigned char query[], int queryLength,
 
         typename SIMD::type unpackedMaxH[SIMD::numSeqs];
         _mm_store_si128((__m128i*)unpackedMaxH, maxH);
-	
+
         // ------------------------ OVERFLOW DETECTION -------------------------- //
         if (!SIMD::satArthm) {
             // This check is based on following assumptions: 
@@ -332,12 +332,12 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
                                                     gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     if (resultCode != 0) {
         printf("Using short\n");
-	    resultCode = swimdSearchDatabase_< Simd<short> >(query, queryLength, 
+        resultCode = swimdSearchDatabase_< Simd<short> >(query, queryLength,
                                                          db, dbLength, dbSeqLengths,
                                                          gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
-	    if (resultCode != 0) {
+        if (resultCode != 0) {
             printf("Using int\n");
-	        resultCode = swimdSearchDatabase_< Simd<int> >(query, queryLength, 
+            resultCode = swimdSearchDatabase_< Simd<int> >(query, queryLength,
                                                            db, dbLength, dbSeqLengths,
                                                            gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
         }
@@ -501,7 +501,7 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
 
     int columnsSinceLastSeqEnd = 0;
     // For each column
-    while (numEndedDbSeqs < dbLength) {	
+    while (numEndedDbSeqs < dbLength) {
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
         __m128i P[alphabetLength];
@@ -516,7 +516,7 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
             P[letter] = _mm_load_si128((__m128i const*)profileRow);
         }
         // ---------------------------------------------------------------------- //
-	
+
         // u - up
         __m128i uF = LOWER_SCORE_BOUND_SIMD;
 
@@ -560,7 +560,7 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
             minF = SIMD::min(minF, F); // For overflow detection
 
             // Calculate H
-    	    H = SIMD::max(F, E);
+            H = SIMD::max(F, E);
             __m128i ulH_P = SIMD::add(ulH, P[query[r]]); 
             H = SIMD::max(H, ulH_P); // H could overflow
 
@@ -592,7 +592,7 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
         
         typename SIMD::type unpackedMaxH[SIMD::numSeqs];
         _mm_store_si128((__m128i*)unpackedMaxH, maxH);
-	
+
         // ------------------------ OVERFLOW DETECTION -------------------------- //
         if (!SIMD::satArthm) {
             /*           // This check is based on following assumptions: 
@@ -724,12 +724,12 @@ static int swimdSearchDatabaseGlobalTemplated(unsigned char query[], int queryLe
          gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     if (resultCode != 0) {
         printf("Using short\n");
-	    resultCode = swimdSearchDatabaseGlobal_< SimdG<short>, MODE >
+        resultCode = swimdSearchDatabaseGlobal_< SimdG<short>, MODE >
             (query, queryLength, db, dbLength, dbSeqLengths,
              gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
-	    if (resultCode != 0) {
+        if (resultCode != 0) {
             printf("Using int\n");
-	        resultCode = swimdSearchDatabaseGlobal_< SimdG<int>, MODE >
+            resultCode = swimdSearchDatabaseGlobal_< SimdG<int>, MODE >
                 (query, queryLength, db, dbLength, dbSeqLengths,
                  gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
         }

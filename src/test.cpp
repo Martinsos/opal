@@ -69,7 +69,7 @@ int main(int argc, char * const argv[]) {
     // Create score matrix
     int * scoreMatrix = createSimpleScoreMatrix(alphabetLength, 3, -1);
 
-	
+
     // Run Swimd
     printf("Starting Swimd!\n");
     start = clock();
@@ -101,7 +101,7 @@ int main(int argc, char * const argv[]) {
     // Print result
     printf("Result: ");
     printInts(scores, dbLength);
-    printf("Maximum: %d\n", maximum(scores, dbLength));	  
+    printf("Maximum: %d\n", maximum(scores, dbLength));
 
 
     // Run normal SW
@@ -123,7 +123,7 @@ int main(int argc, char * const argv[]) {
     printf("Result: ");
     printInts(scores2, dbLength);
     printf("Maximum: %d\n", maximum(scores2, dbLength));
-    	
+
 
     // Print differences in results (hopefully there are none!)
     printf("Diff: ");
@@ -167,7 +167,7 @@ int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int
         for (int i = 0; i < queryLength; i++) {
             prevHs[i] = prevEs[i] = 0;
         }
-	
+
         for (int c = 0; c < dbSeqLengths[seqIdx]; c++) {
             int uF, uH, ulH;
             uF = uH = ulH = 0;
@@ -181,12 +181,12 @@ int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int
                 uF = F;
                 uH = H;
                 ulH = prevHs[r];
-		
+
                 prevHs[r] = H;
                 prevEs[r] = E;
             }
         }
-	
+
         scores[seqIdx] = maxH;
     }
 
@@ -236,7 +236,7 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
                 uF = F;
                 uH = H;
                 ulH = prevHs[r];
-		
+
                 prevHs[r] = H;
                 prevEs[r] = E;
             }
