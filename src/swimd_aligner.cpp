@@ -98,7 +98,7 @@ int main(int argc, char * const argv[]) {
     clock_t start = clock();
     int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
                                          gapOpen, gapExt, scoreMatrix.getMatrix(), alphabetLength,
-                                         scores);
+                                         scores, SWIMD_MODE_SW);
     clock_t finish = clock();
     double cpuTime = ((double)(finish-start))/CLOCKS_PER_SEC;
     // ---------------------------------------------------------------------------- //

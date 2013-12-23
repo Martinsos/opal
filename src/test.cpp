@@ -75,21 +75,17 @@ int main(int argc, char * const argv[]) {
     start = clock();
     int scores[dbLength];
     int resultCode;
-    if (!strcmp(mode, "SW")) {
-        resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
-                                         gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
-    } else {
-        int modeCode;
-        if (!strcmp(mode, "NW")) modeCode = SWIMD_GMODE_NW;
-        else if (!strcmp(mode, "HW")) modeCode = SWIMD_GMODE_HW;
-        else if (!strcmp(mode, "OV")) modeCode = SWIMD_GMODE_OV;
-        else {
-            printf("Invalid mode!\n");
-            return 1;
-        }
-        resultCode = swimdSearchDatabaseGlobal(query, queryLength, db, dbLength, dbSeqsLengths, 
-                                               gapOpen, gapExt, scoreMatrix, alphabetLength, scores, modeCode);
+    int modeCode;
+    if (!strcmp(mode, "NW")) modeCode = SWIMD_MODE_NW;
+    else if (!strcmp(mode, "HW")) modeCode = SWIMD_MODE_HW;
+    else if (!strcmp(mode, "OV")) modeCode = SWIMD_MODE_OV;
+    else if (!strcmp(mode, "SW")) modeCode = SWIMD_MODE_SW;
+    else {
+        printf("Invalid mode!\n");
+        return 1;
     }
+    resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
+                                     gapOpen, gapExt, scoreMatrix, alphabetLength, scores, modeCode);
     finish = clock();
     double time1 = ((double)(finish-start))/CLOCKS_PER_SEC;
     printf("Time: %lf\n", time1);

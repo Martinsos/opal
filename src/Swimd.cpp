@@ -11,10 +11,10 @@ extern "C" {
 /**
  * Contains parameters and SIMD instructions specific for certain score type.
  */
-template<typename T> class Simd {};
+template<typename T> class SimdSW {};
 
 template<>
-struct Simd<char> {
+struct SimdSW<char> {
     typedef char type; //!< Type that will be used for score
     static const int numSeqs = 16; //!< Number of sequences that can be done in parallel.
     static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
@@ -27,7 +27,7 @@ struct Simd<char> {
 };
 
 template<>
-struct Simd<short> {
+struct SimdSW<short> {
     typedef short type;
     static const int numSeqs = 8;
     static const bool satArthm = true;
@@ -40,7 +40,7 @@ struct Simd<short> {
 };
 
 template<>
-struct Simd<int> {
+struct SimdSW<int> {
     typedef int type;
     static const int numSeqs = 4;
     static const bool satArthm = false;
@@ -68,10 +68,10 @@ void print_mm128i(__m128i mm) {
 }
 
 template<class SIMD>
-static int swimdSearchDatabase_(unsigned char query[], int queryLength, 
-                                unsigned char** db, int dbLength, int dbSeqLengths[],
-                                int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                                int scores[]) {
+static int searchDatabaseSW_(unsigned char query[], int queryLength, 
+                             unsigned char** db, int dbLength, int dbSeqLengths[],
+                             int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+                             int scores[]) {
 
     static const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     static const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -318,33 +318,26 @@ static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDb
     }
 }
 
-extern int swimdSearchDatabase(unsigned char query[], int queryLength, 
-                               unsigned char** db, int dbLength, int dbSeqLengths[],
-                               int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                               int scores[]) {
-#ifndef __SSE4_1__
-    return SWIMD_ERR_NO_SIMD_SUPPORT;
-#else
+extern int searchDatabaseSW(unsigned char query[], int queryLength, 
+                            unsigned char** db, int dbLength, int dbSeqLengths[],
+                            int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+                            int scores[]) {
     int resultCode;
-    printf("Using char\n");
-    resultCode = swimdSearchDatabase_< Simd<char> >(query, queryLength, 
-                                                    db, dbLength, dbSeqLengths, 
-                                                    gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+    resultCode = searchDatabaseSW_< SimdSW<char> >(query, queryLength, 
+                                                   db, dbLength, dbSeqLengths, 
+                                                   gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     if (resultCode != 0) {
-        printf("Using short\n");
-        resultCode = swimdSearchDatabase_< Simd<short> >(query, queryLength,
-                                                         db, dbLength, dbSeqLengths,
-                                                         gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+        resultCode = searchDatabaseSW_< SimdSW<short> >(query, queryLength,
+                                                        db, dbLength, dbSeqLengths,
+                                                        gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
         if (resultCode != 0) {
-            printf("Using int\n");
-            resultCode = swimdSearchDatabase_< Simd<int> >(query, queryLength,
-                                                           db, dbLength, dbSeqLengths,
-                                                           gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+            resultCode = searchDatabaseSW_< SimdSW<int> >(query, queryLength,
+                                                          db, dbLength, dbSeqLengths,
+                                                          gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
         }
     }
 
     return resultCode;
-#endif
 }
 
 
@@ -355,14 +348,14 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
 
 
 
-//------------------------------------ SIMD PARAMETERS FOR GLOBAL ALIGNEMNT ---------------------------------//
+//------------------------------------ SIMD PARAMETERS ---------------------------------//
 /**
  * Contains parameters and SIMD instructions specific for certain score type.
  */
-template<typename T> class SimdG {};
+template<typename T> class Simd {};
 
 template<>
-struct SimdG<char> {
+struct Simd<char> {
     typedef char type; //!< Type that will be used for score
     static const int numSeqs = 16; //!< Number of sequences that can be done in parallel.
     static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
@@ -374,7 +367,7 @@ struct SimdG<char> {
 };
 
 template<>
-struct SimdG<short> {
+struct Simd<short> {
     typedef short type;
     static const int numSeqs = 8;
     static const bool satArthm = true;
@@ -386,7 +379,7 @@ struct SimdG<short> {
 };
 
 template<>
-struct SimdG<int> {
+struct Simd<int> {
     typedef int type;
     static const int numSeqs = 4;
     static const bool satArthm = false;
@@ -402,10 +395,10 @@ struct SimdG<int> {
 
 
 template<class SIMD, int MODE>
-static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength, 
-                                      unsigned char** db, int dbLength, int dbSeqLengths[],
-                                      int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                                      int scores[]) {
+static int searchDatabase_(unsigned char query[], int queryLength, 
+                           unsigned char** db, int dbLength, int dbSeqLengths[],
+                           int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+                           int scores[]) {
 
     static const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     static const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -476,7 +469,7 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
     __m128i prevEs[queryLength];
     // Initialize all values
     for (int r = 0; r < queryLength; r++) {
-        if (MODE == SWIMD_GMODE_OV)
+        if (MODE == SWIMD_MODE_OV)
             prevHs[r] = ZERO_SIMD;
         else { // - Q - r * R
             if (r == 0)
@@ -490,7 +483,7 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
 
     // u - up, ul - up left
     __m128i uH, ulH;
-    if (MODE == SWIMD_GMODE_NW) {
+    if (MODE == SWIMD_MODE_NW) {
         ulH = ZERO_SIMD;
         uH = SIMD::sub(R, Q); // -Q + R
     }
@@ -521,7 +514,7 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
         __m128i uF = LOWER_SCORE_BOUND_SIMD;
 
         // Database sequence has fixed start and end only in NW
-        if (MODE == SWIMD_GMODE_NW) {
+        if (MODE == SWIMD_MODE_NW) {
             if (seqJustLoaded) {
                 typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(16)));
                 for (int i = 0; i < SIMD::numSeqs; i++) 
@@ -545,7 +538,7 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
 
         __m128i firstRow_uH, firstRow_ulH; // Values of uH and ulH from first row of column
 
-        if (MODE == SWIMD_GMODE_NW) {
+        if (MODE == SWIMD_MODE_NW) {
             firstRow_uH = uH;
             firstRow_ulH = ulH;
         }
@@ -579,7 +572,7 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
 
         maxLastRowH = SIMD::max(maxLastRowH, H);
 
-        if (MODE == SWIMD_GMODE_NW) {
+        if (MODE == SWIMD_MODE_NW) {
             uH = firstRow_uH;
             ulH = firstRow_ulH;
         }
@@ -627,11 +620,11 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
                     
                     // Calculate best scores
                     __m128i bestScore;
-                    if (MODE == SWIMD_GMODE_OV)
+                    if (MODE == SWIMD_MODE_OV)
                         bestScore = SIMD::max(maxH, maxLastRowH); // Maximum of last row and column
-                    if (MODE == SWIMD_GMODE_HW)
+                    if (MODE == SWIMD_MODE_HW)
                         bestScore = maxLastRowH;
-                    if (MODE == SWIMD_GMODE_NW)
+                    if (MODE == SWIMD_MODE_NW)
                         bestScore = H;
                     typename SIMD::type unpackedBestScore[SIMD::numSeqs];
                     _mm_store_si128((__m128i*)unpackedBestScore, bestScore);
@@ -674,7 +667,7 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
             // Set prevHs
             for (int r = 0; r < queryLength; r++) {
                 prevHs[r] = _mm_and_si128(prevHs[r], resetMaskPacked);
-                if (MODE != SWIMD_GMODE_OV) {
+                if (MODE != SWIMD_MODE_OV) {
                     if (r == 0) {
                         prevHs[0] = SIMD::sub(prevHs[0], _mm_and_si128(setMaskPacked, Q));
                     } else {
@@ -684,7 +677,7 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
             }
 
             // Set ulH and uH if NW
-            if (MODE == SWIMD_GMODE_NW) {
+            if (MODE == SWIMD_MODE_NW) {
                 ulH = _mm_and_si128(ulH, resetMaskPacked); // to 0
                 // Set uH channels to -Q + R
                 uH = _mm_and_si128(uH, resetMaskPacked);
@@ -710,52 +703,52 @@ static int swimdSearchDatabaseGlobal_(unsigned char query[], int queryLength,
 }
 
 template <int MODE>
-static int swimdSearchDatabaseGlobalTemplated(unsigned char query[], int queryLength, 
-                                              unsigned char** db, int dbLength, int dbSeqLengths[],
-                                              int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                                              int scores[]) {
-#ifndef __SSE4_1__
-    return SWIMD_ERR_NO_SIMD_SUPPORT;
-#else
+static int searchDatabase(unsigned char query[], int queryLength, 
+                          unsigned char** db, int dbLength, int dbSeqLengths[],
+                          int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+                          int scores[]) {
     int resultCode;
-    printf("Using char\n");
-    resultCode = swimdSearchDatabaseGlobal_< SimdG<char>, MODE >
+    resultCode = searchDatabase_< Simd<char>, MODE >
         (query, queryLength, db, dbLength, dbSeqLengths, 
          gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     if (resultCode != 0) {
-        printf("Using short\n");
-        resultCode = swimdSearchDatabaseGlobal_< SimdG<short>, MODE >
+        resultCode = searchDatabase_< Simd<short>, MODE >
             (query, queryLength, db, dbLength, dbSeqLengths,
              gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
         if (resultCode != 0) {
-            printf("Using int\n");
-            resultCode = swimdSearchDatabaseGlobal_< SimdG<int>, MODE >
+            resultCode = searchDatabase_< Simd<int>, MODE >
                 (query, queryLength, db, dbLength, dbSeqLengths,
                  gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
         }
     }
 
     return resultCode;
-#endif
 }
 
 
-extern int swimdSearchDatabaseGlobal(unsigned char query[], int queryLength, 
-                                     unsigned char** db, int dbLength, int dbSeqLengths[],
-                                     int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                                     int scores[], const int mode) {
-    if (mode == SWIMD_GMODE_NW) {
-        return swimdSearchDatabaseGlobalTemplated<SWIMD_GMODE_NW>
+extern int swimdSearchDatabase(unsigned char query[], int queryLength, 
+                               unsigned char** db, int dbLength, int dbSeqLengths[],
+                               int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+                               int scores[], const int mode) {
+#ifndef __SSE4_1__
+    return SWIMD_ERR_NO_SIMD_SUPPORT;
+#else
+    if (mode == SWIMD_MODE_NW) {
+        return searchDatabase<SWIMD_MODE_NW>
             (query, queryLength, db, dbLength, dbSeqLengths, 
              gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
-    } else if (mode == SWIMD_GMODE_HW) {
-        return swimdSearchDatabaseGlobalTemplated<SWIMD_GMODE_HW>
+    } else if (mode == SWIMD_MODE_HW) {
+        return searchDatabase<SWIMD_MODE_HW>
             (query, queryLength, db, dbLength, dbSeqLengths, 
              gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
-    } else if (mode == SWIMD_GMODE_OV) {
-        return swimdSearchDatabaseGlobalTemplated<SWIMD_GMODE_OV>
+    } else if (mode == SWIMD_MODE_OV) {
+        return searchDatabase<SWIMD_MODE_OV>
             (query, queryLength, db, dbLength, dbSeqLengths, 
              gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+    } else if (mode == SWIMD_MODE_SW) {
+        return searchDatabaseSW(query, queryLength, db, dbLength, dbSeqLengths, 
+                                gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     }
-    return SWIMD_ERR_INVALID_GMODE;
+    return SWIMD_ERR_INVALID_MODE;
+#endif
 }
