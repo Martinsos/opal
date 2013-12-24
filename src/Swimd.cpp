@@ -55,7 +55,8 @@ struct SimdSW<int> {
 
 
 static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char * &currDbSeqPos, 
-                             int &currDbSeqLength, unsigned char ** db, int dbSeqLengths[]);
+                             int &currDbSeqLength, unsigned char ** db, int dbSeqLengths[], bool calculated[],
+                             int &numEndedDbSeqs);
 
 
 // For debugging
@@ -71,7 +72,7 @@ template<class SIMD>
 static int searchDatabaseSW_(unsigned char query[], int queryLength, 
                              unsigned char** db, int dbLength, int dbSeqLengths[],
                              int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                             int scores[]) {
+                             int scores[], bool calculated[]) {
 
     static const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     static const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -103,9 +104,6 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
 
     // ------------------------ INITIALIZATION -------------------------- //
-    for (int i = 0; i < dbLength; i++)
-        scores[i] = -1;
-
     __m128i zeroes = SIMD::set1(0);
     __m128i scoreZeroes; // 0 normally, but lower bound if using negative range
     if (SIMD::negRange)
@@ -123,7 +121,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++)
         if (loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
-                             currDbSeqsLengths[i], db, dbSeqLengths)) {
+                             currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs)) {
             // Update shortest sequence length if new sequence was loaded
             if (shortestDbSeqLength == -1 || currDbSeqsLengths[i] < shortestDbSeqLength)
                 shortestDbSeqLength = currDbSeqsLengths[i];
@@ -254,9 +252,10 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                         scores[currDbSeqsIdxs[i]] = unpackedMaxH[i];
                         if (SIMD::negRange)
                             scores[currDbSeqsIdxs[i]] -= LOWER_BOUND;
+                        calculated[currDbSeqsIdxs[i]] = true;
                         // Load next sequence
                         loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
-                                         currDbSeqsLengths[i], db, dbSeqLengths);
+                                         currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs);
                         if (SIMD::negRange)
                             resetMask[i] = LOWER_BOUND; //Sets to LOWER_BOUND when used with saturated add and value < 0
                         else
@@ -304,7 +303,12 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 }
 
 static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char* &currDbSeqPos, 
-                                    int &currDbSeqLength, unsigned char** db, int dbSeqLengths[]) {
+                                    int &currDbSeqLength, unsigned char** db, int dbSeqLengths[], bool calculated[],
+                                    int &numEndedDbSeqs) {
+    while (calculated[nextDbSeqIdx] && nextDbSeqIdx < dbLength) {
+        nextDbSeqIdx++;
+        numEndedDbSeqs++;
+    }
     if (nextDbSeqIdx < dbLength) { // If there is sequence to load
         currDbSeqIdx = nextDbSeqIdx;
         currDbSeqPos = db[nextDbSeqIdx];
@@ -324,28 +328,35 @@ extern int searchDatabaseSW(unsigned char query[], int queryLength,
                             int scores[]) {
     int resultCode = 0;
     const int chunkSize = 1024;
+    bool* calculated = new bool[chunkSize];
     for (int startIdx = 0; startIdx < dbLength; startIdx += chunkSize) {
         unsigned char** db_ = db + startIdx;
         int* dbSeqLengths_ = dbSeqLengths + startIdx;
         int* scores_ = scores + startIdx;
         int dbLength_ = startIdx + chunkSize >= dbLength ? dbLength - startIdx : chunkSize;
+        for (int i = 0; i < dbLength_; i++)
+            calculated[i] = false;
         resultCode = searchDatabaseSW_< SimdSW<char> >(query, queryLength, 
                                                        db_, dbLength_, dbSeqLengths_, 
-                                                       gapOpen, gapExt, scoreMatrix, alphabetLength, scores_);
+                                                       gapOpen, gapExt, scoreMatrix, alphabetLength, scores_,
+                                                       calculated);
         if (resultCode != 0) {
             resultCode = searchDatabaseSW_< SimdSW<short> >(query, queryLength,
                                                             db_, dbLength_, dbSeqLengths_,
-                                                            gapOpen, gapExt, scoreMatrix, alphabetLength, scores_);
+                                                            gapOpen, gapExt, scoreMatrix, alphabetLength, scores_,
+                                                            calculated);
             if (resultCode != 0) {
                 resultCode = searchDatabaseSW_< SimdSW<int> >(query, queryLength,
                                                               db_, dbLength_, dbSeqLengths_,
-                                                              gapOpen, gapExt, scoreMatrix, alphabetLength, scores_);
+                                                              gapOpen, gapExt, scoreMatrix, alphabetLength, scores_,
+                                                              calculated);
                 if (resultCode != 0)
-                    return resultCode;
+                    break;
             }
         }
     }
 
+    delete[] calculated;
     return resultCode;
 }
 
@@ -407,7 +418,7 @@ template<class SIMD, int MODE>
 static int searchDatabase_(unsigned char query[], int queryLength, 
                            unsigned char** db, int dbLength, int dbSeqLengths[],
                            int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                           int scores[]) {
+                           int scores[], bool calculated[]) {
 
     static const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     static const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -443,9 +454,6 @@ static int searchDatabase_(unsigned char query[], int queryLength,
 
 
     // ------------------------ INITIALIZATION -------------------------- //
-    for (int i = 0; i < dbLength; i++)
-        scores[i] = -1;
-
     const __m128i ZERO_SIMD = SIMD::set1(0);
     const __m128i LOWER_BOUND_SIMD = SIMD::set1(LOWER_BOUND);
     const __m128i LOWER_SCORE_BOUND_SIMD = SIMD::set1(LOWER_SCORE_BOUND);
@@ -462,7 +470,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++)
         if (loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
-                             currDbSeqsLengths[i], db, dbSeqLengths)) {
+                             currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs)) {
             justLoaded[i] = seqJustLoaded = true;
             // Update shortest sequence length if new sequence was loaded
             if (shortestDbSeqLength == -1 || currDbSeqsLengths[i] < shortestDbSeqLength)
@@ -642,9 +650,10 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                         numEndedDbSeqs++;
                         // Save best score
                         scores[currDbSeqsIdxs[i]] = unpackedBestScore[i];
+                        calculated[currDbSeqsIdxs[i]] = true;
                         // Load next sequence
                         if (loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
-                                             currDbSeqsLengths[i], db, dbSeqLengths)) {
+                                             currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs)) {
                             justLoaded[i] = seqJustLoaded = true;
                         }
                     } else {
@@ -718,28 +727,31 @@ static int searchDatabase(unsigned char query[], int queryLength,
                           int scores[]) {
     int resultCode = 0;
     const int chunkSize = 1024;
+    bool* calculated = new bool[chunkSize];
     for (int startIdx = 0; startIdx < dbLength; startIdx += chunkSize) {
         unsigned char** db_ = db + startIdx;
         int* dbSeqLengths_ = dbSeqLengths + startIdx;
         int* scores_ = scores + startIdx;
         int dbLength_ = startIdx + chunkSize >= dbLength ? dbLength - startIdx : chunkSize;
+        for (int i = 0; i < dbLength_; i++)
+            calculated[i] = false;
         resultCode = searchDatabase_< Simd<char>, MODE >
             (query, queryLength, db_, dbLength_, dbSeqLengths_, 
-             gapOpen, gapExt, scoreMatrix, alphabetLength, scores_);
+             gapOpen, gapExt, scoreMatrix, alphabetLength, scores_, calculated);
         if (resultCode != 0) {
             resultCode = searchDatabase_< Simd<short>, MODE >
                 (query, queryLength, db_, dbLength_, dbSeqLengths_,
-                 gapOpen, gapExt, scoreMatrix, alphabetLength, scores_);
+                 gapOpen, gapExt, scoreMatrix, alphabetLength, scores_, calculated);
             if (resultCode != 0) {
                 resultCode = searchDatabase_< Simd<int>, MODE >
                     (query, queryLength, db_, dbLength_, dbSeqLengths_,
-                     gapOpen, gapExt, scoreMatrix, alphabetLength, scores_);
+                     gapOpen, gapExt, scoreMatrix, alphabetLength, scores_, calculated);
                 if (resultCode != 0)
-                    return resultCode;
+                    break;
             }
         }
     }
-
+    delete[] calculated;
     return resultCode;
 }
 
