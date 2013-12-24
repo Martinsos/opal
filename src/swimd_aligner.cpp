@@ -24,9 +24,11 @@ int main(int argc, char * const argv[]) {
     bool scoreMatrixFileGiven = false;
     char scoreMatrixFilepath[512];
     bool silent = false;
+    char mode[16] = "SW";
     int option;
-    while ((option = getopt(argc, argv, "o:e:m:f:s")) >= 0) {
+    while ((option = getopt(argc, argv, "a:o:e:m:f:s")) >= 0) {
         switch (option) {
+        case 'a': strcpy(mode, optarg); break;
         case 'o': gapOpen = atoi(optarg); break;
         case 'e': gapExt = atoi(optarg); break;
         case 'm': scoreMatrixName = string(optarg); break;
@@ -43,6 +45,7 @@ int main(int argc, char * const argv[]) {
         fprintf(stderr, "\t-m Blosum50\tScore matrix to be used. [default: Blosum50]\n"); 
         fprintf(stderr, "\t-f FILE\tFILE contains score matrix and some additional data. Overrides -m.\n");
         fprintf(stderr, "\t-s\tIf specified, there will be no score output (silent mode).\n");
+        fprintf(stderr, "\t-a SW|NW|HW|OV\tAlignment mode that will be used. [default: SW]\n");
         return 1;
     }
     //-------------------------------------------------------------------------//
@@ -95,10 +98,24 @@ int main(int argc, char * const argv[]) {
     printf("Searching...\n");
     // ----------------------------- MAIN CALCULATION ----------------------------- //
     int* scores = new int[dbLength];
+    int modeCode;
+    if (!strcmp(mode, "SW"))
+        modeCode = SWIMD_MODE_SW;
+    else if (!strcmp(mode, "HW"))
+        modeCode = SWIMD_MODE_HW;
+    else if (!strcmp(mode, "NW"))
+        modeCode = SWIMD_MODE_NW;
+    else if (!strcmp(mode, "OV"))
+        modeCode = SWIMD_MODE_OV;
+    else {
+        printf("Invalid mode!\n");
+        return 1;
+    }
+    printf("Using mode %s\n", mode);
     clock_t start = clock();
     int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
                                          gapOpen, gapExt, scoreMatrix.getMatrix(), alphabetLength,
-                                         scores, SWIMD_MODE_SW);
+                                         scores, modeCode);
     clock_t finish = clock();
     double cpuTime = ((double)(finish-start))/CLOCKS_PER_SEC;
     // ---------------------------------------------------------------------------- //
@@ -112,24 +129,26 @@ int main(int argc, char * const argv[]) {
 
     printf("\nCpu time of searching: %lf\n", cpuTime);
 
-
-    int for8, for16, for32;
-    for8 = for16 = for32 = 0;
-    double averageScore = 0;
-    for (int i = 0; i < dbLength; i++) {
-        averageScore += (double)scores[i] / dbLength;
-        if (scores[i] < CHAR_MAX)
-            for8++;
-        else if (scores[i] < SHRT_MAX)
-            for16++;
-        else
-            for32++;
+    // Print this statistics only for SW because they are not valid for other modes.
+    if (!(strcmp(mode, "SW"))) {
+        int for8, for16, for32;
+        for8 = for16 = for32 = 0;
+        double averageScore = 0;
+        for (int i = 0; i < dbLength; i++) {
+            averageScore += (double)scores[i] / dbLength;
+            if (scores[i] < CHAR_MAX)
+                for8++;
+            else if (scores[i] < SHRT_MAX)
+                for16++;
+            else
+                for32++;
+        }
+        printf("\nDatabase statistics:\n");
+        printf("\tFor 8  (< %10d): %8d\n", CHAR_MAX, for8);
+        printf("\tFor 16 (< %10d): %8d\n", SHRT_MAX, for16);
+        printf("\tFor 32 (< %10d): %8d\n",  INT_MAX, for32);
+        printf("\tAverage score: %lf\n", averageScore);
     }
-    printf("\nDatabase statistics:\n");
-    printf("\tFor 8  (< %10d): %8d\n", CHAR_MAX, for8);
-    printf("\tFor 16 (< %10d): %8d\n", SHRT_MAX, for16);
-    printf("\tFor 32 (< %10d): %8d\n",  INT_MAX, for32);
-    printf("\tAverage score: %lf\n", averageScore);    
 
     // Free allocated space
     delete querySequences;

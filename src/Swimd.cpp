@@ -322,23 +322,26 @@ extern int searchDatabaseSW(unsigned char query[], int queryLength,
                             unsigned char** db, int dbLength, int dbSeqLengths[],
                             int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
                             int scores[]) {
-    int resultCode;
+    int resultCode = 0;
     const int chunkSize = 1024;
     for (int startIdx = 0; startIdx < dbLength; startIdx += chunkSize) {
         unsigned char** db_ = db + startIdx;
-        int* dbSeqLengths_ = dbSeqLengths + startIdx; 
+        int* dbSeqLengths_ = dbSeqLengths + startIdx;
+        int* scores_ = scores + startIdx;
         int dbLength_ = startIdx + chunkSize >= dbLength ? dbLength - startIdx : chunkSize;
         resultCode = searchDatabaseSW_< SimdSW<char> >(query, queryLength, 
                                                        db_, dbLength_, dbSeqLengths_, 
-                                                       gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+                                                       gapOpen, gapExt, scoreMatrix, alphabetLength, scores_);
         if (resultCode != 0) {
             resultCode = searchDatabaseSW_< SimdSW<short> >(query, queryLength,
                                                             db_, dbLength_, dbSeqLengths_,
-                                                            gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+                                                            gapOpen, gapExt, scoreMatrix, alphabetLength, scores_);
             if (resultCode != 0) {
                 resultCode = searchDatabaseSW_< SimdSW<int> >(query, queryLength,
                                                               db_, dbLength_, dbSeqLengths_,
-                                                              gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+                                                              gapOpen, gapExt, scoreMatrix, alphabetLength, scores_);
+                if (resultCode != 0)
+                    return resultCode;
             }
         }
     }
@@ -713,18 +716,27 @@ static int searchDatabase(unsigned char query[], int queryLength,
                           unsigned char** db, int dbLength, int dbSeqLengths[],
                           int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
                           int scores[]) {
-    int resultCode;
-    resultCode = searchDatabase_< Simd<char>, MODE >
-        (query, queryLength, db, dbLength, dbSeqLengths, 
-         gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
-    if (resultCode != 0) {
-        resultCode = searchDatabase_< Simd<short>, MODE >
-            (query, queryLength, db, dbLength, dbSeqLengths,
-             gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+    int resultCode = 0;
+    const int chunkSize = 1024;
+    for (int startIdx = 0; startIdx < dbLength; startIdx += chunkSize) {
+        unsigned char** db_ = db + startIdx;
+        int* dbSeqLengths_ = dbSeqLengths + startIdx;
+        int* scores_ = scores + startIdx;
+        int dbLength_ = startIdx + chunkSize >= dbLength ? dbLength - startIdx : chunkSize;
+        resultCode = searchDatabase_< Simd<char>, MODE >
+            (query, queryLength, db_, dbLength_, dbSeqLengths_, 
+             gapOpen, gapExt, scoreMatrix, alphabetLength, scores_);
         if (resultCode != 0) {
-            resultCode = searchDatabase_< Simd<int>, MODE >
-                (query, queryLength, db, dbLength, dbSeqLengths,
-                 gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+            resultCode = searchDatabase_< Simd<short>, MODE >
+                (query, queryLength, db_, dbLength_, dbSeqLengths_,
+                 gapOpen, gapExt, scoreMatrix, alphabetLength, scores_);
+            if (resultCode != 0) {
+                resultCode = searchDatabase_< Simd<int>, MODE >
+                    (query, queryLength, db_, dbLength_, dbSeqLengths_,
+                     gapOpen, gapExt, scoreMatrix, alphabetLength, scores_);
+                if (resultCode != 0)
+                    return resultCode;
+            }
         }
     }
 
