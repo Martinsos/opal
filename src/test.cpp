@@ -140,7 +140,7 @@ int main(int argc, char * const argv[]) {
 
 void fillRandomly(unsigned char* seq, int seqLength, int alphabetLength) {
     for (int i = 0; i < seqLength; i++)
-        seq[i] = rand() % 4;
+        seq[i] = rand() % alphabetLength;
 }
 
 int * createSimpleScoreMatrix(int alphabetLength, int match, int mismatch) {
