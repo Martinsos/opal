@@ -43,8 +43,17 @@ extern "C" {
  * @param [in] scoreMatrix Matrix of dimensions (alphabetLength, alphabetLength).
  * @param [in] alphabetLength
  * @param [out] scores Score for every database sequence is stored here (-1 if not calculated).
- * @param [in] mode Mode of alignment, different mode means different algorithm.
- *                  Valid modes: SWIMD_MODE_NW, SWIMD_MODE_HW, SWIMD_MODE_OV, SWIMD_MODE_SW.
+ * @param [in] mode Mode of alignment, different mode means different algorithm. 
+ *                    SWIMD_MODE_NW: global alignment (Needleman-Wunsch)
+ *                    SWIMD_MODE_HW: semi-global. gap at query start and gap at query end 
+ *                                   are not penalized.
+ *                                              DBSEQ
+ *                                             _QUERY_
+ *                    SWIMD_MODE_OV: semi-global. gap at query start, gap at query end, 
+ *                                   gap at dbseq start and gap at dbseq end are not penalized. 
+ *                                             _DBSEQ_
+ *                                             _QUERY_
+ *                    SWIMD_MODE_SW: local alignment (Smith-Waterman)
  * @return 0 if all okay, error code otherwise.
  */
 int swimdSearchDatabase(unsigned char query[], int queryLength, 
