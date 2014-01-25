@@ -7,17 +7,6 @@
  *  - db sequences are not padded
  *  - using saturation arithmetic when possible
  *  - works for SSE4.1 and higher
- * 
- * TODO: 
- *       - maybe pad columns so length%4 == 0, that way I can check for sequence ending only on every 4th column, not every column
- *       - put consts where possible
- *       - do some serious profiling
- *       - Do genomes usually work with score matrices or just mismatch and match values?
- *       - think of some intelligent way on deciding which precision to use when
- *           - when overflow happens, do not calculate what has been calculated
- *           - keep track of N last scores, if they are low enough, switch to lower precision
- *           - another idea: do calculation like in basic idea but in blocks, so smaller precisions get more chance
- *           - another idea: first calculate all with byte, then those that overflowed with higher precision and so on
  *************************************************************************************/
 
 #ifdef __cplusplus 
