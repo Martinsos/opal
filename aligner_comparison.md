@@ -4,7 +4,8 @@ Here are described results of speed comparison of SWIMD with other aligners: SSW
 SSW, SSEARCH and SWIPE do only Smith-Waterman alignment so we compared only for SW.
 
 Aligners were tested by quering sequences against UniProtKB/Swiss-Prot database (contains 541762 sequences).  
-Sequences and database can be obtained from www.uniprot.org (www.uniprot.org/downloads -> UniProtKB/Swiss-Prot).
+Database can be obtained from www.uniprot.org/downloads -> UniProtKB/Swiss-Prot.  
+Specific sequence can also be obtained from www.uniprot.org by searching it by name (Search tab).
 
 All aligners were tested with following parameters:
 * only score is calculated (not alignments)
