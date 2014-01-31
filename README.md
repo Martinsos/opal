@@ -1,7 +1,7 @@
 # Swimd
 
-Swimd is C/C++ library for fast query vs database sequence alignment using SSE.
-Swimd is implemented mainly by Rognes's "Faster Smith-Waterman database searches with inter-sequence SIMD parallelisation".
+Swimd is C/C++ library for fast query vs database sequence alignment using SSE.  
+Swimd is implemented mainly by Rognes's "Faster Smith-Waterman database searches with inter-sequence SIMD parallelisation".  
 Main difference is that Swimd offers 4 alignment modes instead of just Smith-Waterman.
 
 #### Requirements
@@ -15,7 +15,7 @@ Swimd offers 4 different modes of alignment: 1 local and 3 global modes, explain
 * OV: Semi-global alignment. Gap at query start, gap at query end, gap at target start and gap at target end are not penalized.
 
 #### Usage
-To use Swimd you just have to include swimd.h in your code and compile it together with swimd.cpp.
+To use Swimd you just have to include swimd.h in your code and compile it together with swimd.cpp.  
 For examples of usage take a look at test.cpp and swimd_aligner.cpp.
 
 ## Swimd aligner
