@@ -23,9 +23,10 @@ How aligners were called:
 Following table shows how much time took for different sequences to be aligned against UniProtKB/Swiss-Prot database.
 All time is in seconds. Tests were performed on Intel Core i3 M 350 @ 2.27GHz with 4GB RAM.
 
-|             | O74807 | Q3ZAI3 | P18080 |
-|-------------|--------|--------|--------|
-| **SSW**     |  20.4  |  55.2  |   ?    |
-| **_SWIMD_** |  18.2  |  46.0  |  60.5  |
-| **SSEARCH** |  16.0  |  38.8  |  48.6  |
-| **SWIPE**   |   9.6  |  32.3  |  41.9  |
+|                  | O74807 | P19930 | Q3ZAI3 | P18080 |
+|------------------|--------|--------|--------|--------|
+| **query length** |   110  |   195  |   390  |   513  |
+| **SSW**          |  20.2  |  36.4  |  54.4  |  68.4  |
+| **_SWIMD_**      |  18.2  |  26.6  |  46.0  |  60.5  |
+| **SSEARCH**      |  16.8  |  27.3  |  38.6  |  48.2  |
+| **SWIPE**        |   9.6  |  17.0  |  32.1  |  41.5  |
