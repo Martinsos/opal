@@ -14,7 +14,7 @@ extern "C" {
 #endif
 
 // Error codes
-#define SWIMD_ERR_OVERFLOW 1 //!< Returned when score overflow happens.
+#define SWIMD_ERR_OVERFLOW 1 //!< Returned when score overflow happens. Happens only if score can't fit in int.
 #define SWIMD_ERR_NO_SIMD_SUPPORT 2 //!< Returned if available SIMD is not SSE4.1 or higher.
 #define SWIMD_ERR_INVALID_MODE 3 //!< Returned when given mode is invalid.
     
@@ -33,6 +33,7 @@ extern "C" {
  * Opening of gap is penalized with gapOpen, while gap extension is penalized with gapExt.
  * gapOpen, gapExt and scores from scoreMatrix must be in (INT_MIN/2, INT_MAX/2).
  * Detects overflow only for SW!
+ * Although not crucial, sorting database sequences ascending by length can give some extra speed.
  * @param [in] query Query sequence.
  * @param [in] queryLength Length of query sequence.
  * @param [in] db Array of database sequences (each sequence is also an array).
