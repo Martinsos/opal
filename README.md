@@ -48,7 +48,7 @@ int dbSeqsLengths[4] = {14, 12, 13, 9};
 
 int scores[4];
 int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
-                                         gapOpen, gapExt, scoreMatrix, alphabetLength, scores, SWIMD_MODE_SW);
+                                     gapOpen, gapExt, scoreMatrix, alphabetLength, scores, SWIMD_MODE_SW);
 printf("%d %d %d %d\n", scores[0], scores[1], scores[2], scores[3]);
 ...
 ```
