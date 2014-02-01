@@ -15,8 +15,45 @@ Swimd offers 4 different modes of alignment: 1 local and 3 global modes, explain
 * OV: Semi-global alignment. Gap at query start, gap at query end, gap at target start and gap at target end are not penalized.
 
 #### Usage
-To use Swimd you just have to include swimd.h in your code and compile it together with swimd.cpp.  
-For examples of usage take a look at test.cpp and swimd_aligner.cpp.
+To use Swimd you just have to include Swimd.h in your code and compile your code together with Swimd.cpp using appropriate compiler flag for SSE, for example -msse4.1 (or just use -march which will detect your arhitecture and will also use appropriate SSE flag).  
+
+```
+...
+#include "Swimd.h"
+...
+```
+
+```
+...
+int alphabetLength = 4;
+int gapOpen = 3;
+int gapExt = 1;
+int scoreMatrix[16] = {
+    2, -1, -3, 0,
+    -1, 4, -5, -1,
+    -3, -5, 1, -10,
+    0, -1, -10, 4
+};
+
+int queryLength = 10;
+unsigned char query[10] = {0,1,3,2,1,0,3,0,1,1};
+
+int dbLength = 4;
+unsigned char dbSeq1[14] = {1,3,2,3,0,0,1,0,2,2,1,2,3,2};
+unsigned char dbSeq2[12] = {2,1,1,3,2,0,0,2,2,0,2,1};
+unsigned char dbSeq3[13] = {0,0,2,1,0,3,1,1,2,3,2,1,0};
+unsigned char dbSeq4[9] = {2,3,3,3,1,1,2,2,0};
+unsigned char* db[4] = { dbSeq1, dbSeq2, dbSeq3, dbSeq4 };
+int dbSeqsLengths[4] = {14, 12, 13, 9};
+
+int scores[4];
+int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
+                                         gapOpen, gapExt, scoreMatrix, alphabetLength, scores, SWIMD_MODE_SW);
+printf("%d %d %d %d\n", scores[0], scores[1], scores[2], scores[3]);
+...
+```
+
+For more examples of usage take a look at test.cpp and swimd_aligner.cpp.
 
 ## Swimd aligner
 In order to compile and use simple aligner that uses Swimd run makefile in src:
