@@ -8,12 +8,12 @@ Database can be obtained from www.uniprot.org/downloads -> UniProtKB/Swiss-Prot.
 Specific sequence can also be obtained from www.uniprot.org by searching it by name (Search tab).
 
 All aligners were tested with following parameters:
-* only score is calculated (not alignments)
-* time of reading sequences and database was not measured
 * number of threads = 1
 * gap opening = 3
 * gap extension = 1
 * score matrix = BLOSUM50
+
+Only scores were calculated (not alignments). Time spent to read sequences and database was not measured.
 
 How aligners were called:
 * SSW: `./ssw_test -p uniprot_sprot.fasta <query_file>`
@@ -22,7 +22,7 @@ How aligners were called:
 * SWIPE: `./swipe -a 1 -p 1 -G 3 -E 1 -M BLOSUM50 -b 0 -i <query_file> -d uniprot_sprot` NOTE: database had to be preprocessed for SWIPE using _makeblastdb_
 
 Following table shows how much time took for different sequences to be aligned against UniProtKB/Swiss-Prot database.
-All time is in seconds. Tests were performed on Intel Core i3 M 350 @ 2.27GHz with 4GB RAM.
+All times are in seconds. Tests were performed on Intel Core i3 M 350 @ 2.27GHz with 4GB RAM.
 
 |                  | O74807 | P19930 | Q3ZAI3 | P18080 |
 |------------------|--------|--------|--------|--------|
