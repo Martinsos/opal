@@ -462,7 +462,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
     int currDbSeqsIdxs[SIMD::numSeqs]; // index in db
     unsigned char* currDbSeqsPos[SIMD::numSeqs]; // current element for each current database sequence
     int currDbSeqsLengths[SIMD::numSeqs];
-    bool justLoaded[SIMD::numSeqs]; // True if sequence was just loaded into channel
+    bool justLoaded[SIMD::numSeqs] = {0}; // True if sequence was just loaded into channel
     bool seqJustLoaded = false; // True if at least one sequence was just loaded into channel
     int shortestDbSeqLength = -1;  // length of shortest sequence among current database sequences
     int numEndedDbSeqs = 0; // Number of sequences that ended

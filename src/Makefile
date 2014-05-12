@@ -4,7 +4,7 @@ CFLAGS = -march=native -O3
 
 DEBUG ?= 0
 ifeq ($(DEBUG), 1)
-	CFLAGS += -g
+	CFLAGS += -g -Wall
 endif
 
 all: test swimd_aligner
