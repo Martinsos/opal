@@ -29,7 +29,7 @@ int main(int argc, char * const argv[]) {
     }
     
     clock_t start, finish;
-    srand(time(NULL));
+    srand(42);
 
     int alphabetLength = 4;
     int gapOpen = 11;
