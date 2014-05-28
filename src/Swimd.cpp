@@ -123,9 +123,9 @@ static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx,
 
 // For debugging
 template<class SIMD>
-void print_mm128i(__m128i mm) {
+void print_mmxxxi(__mxxxi mm) {
     typename SIMD::type unpacked[SIMD::numSeqs];
-    _mm_store_si128((__m128i*)unpacked, mm);
+    _mmxxx_store_si((__mxxxi*)unpacked, mm);
     for (int i = 0; i < SIMD::numSeqs; i++)
         printf("%d ", unpacked[i]);
 }
@@ -821,12 +821,8 @@ static int searchDatabase(unsigned char query[], int queryLength,
 extern int swimdSearchDatabase(unsigned char query[], int queryLength, 
                                unsigned char** db, int dbLength, int dbSeqLengths[],
                                int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                               int scores[], const int mode) {
-#ifdef __AVX2__
-    printf("AVX2!\n");
-#endif
-    
-#ifndef __SSE4_1__
+                               int scores[], const int mode) {    
+#if !defined(__SSE4_1__) && !defined(__AVX2__)
     return SWIMD_ERR_NO_SIMD_SUPPORT;
 #else
     if (mode == SWIMD_MODE_NW) {

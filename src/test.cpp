@@ -45,7 +45,7 @@ int main(int argc, char * const argv[]) {
     unsigned char * db[dbLength];
     int dbSeqsLengths[dbLength];
     for (int i = 0; i < dbLength; i++) {
-        dbSeqsLengths[i] = 800 + rand()%4000;
+        dbSeqsLengths[i] = 800 + rand() % 4000;
         db[i] = new unsigned char[dbSeqsLengths[i]];
         fillRandomly(db[i], dbSeqsLengths[i], alphabetLength);
     }
@@ -71,6 +71,11 @@ int main(int argc, char * const argv[]) {
 
     // Run Swimd
     printf("Starting Swimd!\n");
+#ifdef __AVX2__
+    printf("Using AVX2!\n");
+#elif __SSE4_1__
+    printf("Using SSE4.1!\n");
+#endif
     start = clock();
     int scores[dbLength];
     int resultCode;
