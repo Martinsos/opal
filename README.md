@@ -6,6 +6,8 @@ Main difference is that Swimd offers 4 alignment modes instead of just Smith-Wat
 
 #### Requirements
 SSE4.1 or higher.
+If AVX2 is available, Swimd will consume two times more sequences and will therefore work two times faster.
+By compiling code with makefile and running ./test, you can see if you have SSE4.1 or AVX2 and also see if everything is working.
 
 #### Alignment modes
 Swimd offers 4 different modes of alignment: 1 local and 3 global modes, explained below.
