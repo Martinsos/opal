@@ -36,7 +36,7 @@ int main(int argc, char * const argv[]) {
     int gapExt = 1;
 
     // Create random query
-    int queryLength = 300;
+    int queryLength = 1000;
     unsigned char query[queryLength];
     fillRandomly(query, queryLength, alphabetLength);
     
@@ -45,7 +45,7 @@ int main(int argc, char * const argv[]) {
     unsigned char * db[dbLength];
     int dbSeqsLengths[dbLength];
     for (int i = 0; i < dbLength; i++) {
-        dbSeqsLengths[i] = 150 + rand()%200;
+        dbSeqsLengths[i] = 800 + rand()%4000;
         db[i] = new unsigned char[dbSeqsLengths[i]];
         fillRandomly(db[i], dbSeqsLengths[i], alphabetLength);
     }

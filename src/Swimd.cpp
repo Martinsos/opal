@@ -2,10 +2,25 @@
 #include <limits>
 
 extern "C" {
-#include <immintrin.h> // AVX
+#include <immintrin.h> // AVX2 and lower
 }
 
 #include "Swimd.h"
+
+
+#ifdef __AVX2__
+const int SIMD_REG_SIZE = 256; //!< number of bits in register
+typedef __m256i __mxxxi; //!< represents register containing integers
+#define _mmxxx_load_si  _mm256_load_si256
+#define _mmxxx_store_si _mm256_store_si256
+#define _mmxxx_and_si   _mm256_and_si256
+#else // SSE4.1
+const int SIMD_REG_SIZE = 128;
+typedef __m128i __mxxxi;
+#define _mmxxx_load_si  _mm_load_si128
+#define _mmxxx_store_si _mm_store_si128
+#define _mmxxx_and_si   _mm_and_si128
+#endif
 
 //------------------------------------ SIMD PARAMETERS ---------------------------------//
 /**
@@ -16,40 +31,64 @@ template<typename T> class SimdSW {};
 template<>
 struct SimdSW<char> {
     typedef char type; //!< Type that will be used for score
-    static const int numSeqs = 16; //!< Number of sequences that can be done in parallel.
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
     static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
     static const bool negRange = true; //!< True if it uses negative range for score representation, goes with saturation
-    static inline __m128i add(const __m128i& a, const __m128i& b) { return _mm_adds_epi8(a, b); }
-    static inline __m128i sub(const __m128i& a, const __m128i& b) { return _mm_subs_epi8(a, b); }
-    static inline __m128i min(const __m128i& a, const __m128i& b) { return _mm_min_epu8(a, b); }
-    static inline __m128i max(const __m128i& a, const __m128i& b) { return _mm_max_epu8(a, b); }
-    static inline __m128i set1(int a) { return _mm_set1_epi8(a); }
+#ifdef __AVX2__
+    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm256_adds_epi8(a, b); }
+    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm256_subs_epi8(a, b); }
+    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm256_min_epu8(a, b); }
+    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm256_max_epu8(a, b); }
+    static inline __mxxxi set1(int a) { return _mm256_set1_epi8(a); }
+#else
+    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm_adds_epi8(a, b); }
+    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm_subs_epi8(a, b); }
+    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm_min_epu8(a, b); }
+    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm_max_epu8(a, b); }
+    static inline __mxxxi set1(int a) { return _mm_set1_epi8(a); }
+#endif
 };
 
 template<>
 struct SimdSW<short> {
     typedef short type;
-    static const int numSeqs = 8;
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(short));
     static const bool satArthm = true;
     static const bool negRange = false;
-    static inline __m128i add(const __m128i& a, const __m128i& b) { return _mm_adds_epi16(a, b); }
-    static inline __m128i sub(const __m128i& a, const __m128i& b) { return _mm_subs_epi16(a, b); }
-    static inline __m128i min(const __m128i& a, const __m128i& b) { return _mm_min_epi16(a, b); }
-    static inline __m128i max(const __m128i& a, const __m128i& b) { return _mm_max_epi16(a, b); }
-    static inline __m128i set1(int a) { return _mm_set1_epi16(a); }
+#ifdef __AVX2__
+    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm256_adds_epi16(a, b); }
+    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm256_subs_epi16(a, b); }
+    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm256_min_epi16(a, b); }
+    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm256_max_epi16(a, b); }
+    static inline __mxxxi set1(int a) { return _mm256_set1_epi16(a); }
+#else
+    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm_adds_epi16(a, b); }
+    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm_subs_epi16(a, b); }
+    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm_min_epi16(a, b); }
+    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm_max_epi16(a, b); }
+    static inline __mxxxi set1(int a) { return _mm_set1_epi16(a); }
+#endif
 };
 
 template<>
 struct SimdSW<int> {
     typedef int type;
-    static const int numSeqs = 4;
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int));
     static const bool satArthm = false;
     static const bool negRange = false;
-    static inline __m128i add(const __m128i& a, const __m128i& b) { return _mm_add_epi32(a, b); }
-    static inline __m128i sub(const __m128i& a, const __m128i& b) { return _mm_sub_epi32(a, b); }
-    static inline __m128i min(const __m128i& a, const __m128i& b) { return _mm_min_epi32(a, b); }
-    static inline __m128i max(const __m128i& a, const __m128i& b) { return _mm_max_epi32(a, b); }
-    static inline __m128i set1(int a) { return _mm_set1_epi32(a); }
+#ifdef __AVX2__
+    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm256_add_epi32(a, b); }
+    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm256_sub_epi32(a, b); }
+    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm256_min_epi32(a, b); }
+    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm256_max_epi32(a, b); }
+    static inline __mxxxi set1(int a) { return _mm256_set1_epi32(a); }
+#else
+    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm_add_epi32(a, b); }
+    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm_sub_epi32(a, b); }
+    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm_min_epi32(a, b); }
+    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm_max_epi32(a, b); }
+    static inline __mxxxi set1(int a) { return _mm_set1_epi32(a); }
+#endif    
 };
 //--------------------------------------------------------------------------------------//
 
@@ -104,8 +143,8 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
 
     // ------------------------ INITIALIZATION -------------------------- //
-    __m128i zeroes = SIMD::set1(0);
-    __m128i scoreZeroes; // 0 normally, but lower bound if using negative range
+    __mxxxi zeroes = SIMD::set1(0);
+    __mxxxi scoreZeroes; // 0 normally, but lower bound if using negative range
     if (SIMD::negRange)
         scoreZeroes = SIMD::set1(LOWER_BOUND);
     else
@@ -128,18 +167,18 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         }
 
     // Q is gap open penalty, R is gap ext penalty.
-    __m128i Q = SIMD::set1(gapOpen);
-    __m128i R = SIMD::set1(gapExt);
+    __mxxxi Q = SIMD::set1(gapOpen);
+    __mxxxi R = SIMD::set1(gapExt);
 
     // Previous H column (array), previous E column (array), previous F, all signed short
-    __m128i prevHs[queryLength];
-    __m128i prevEs[queryLength];
+    __mxxxi prevHs[queryLength];
+    __mxxxi prevEs[queryLength];
     // Initialize all values to 0
     for (int i = 0; i < queryLength; i++) {
         prevHs[i] = prevEs[i] = scoreZeroes;
     }
 
-    __m128i maxH = scoreZeroes;  // Best score in sequence
+    __mxxxi maxH = scoreZeroes;  // Best score in sequence
     // ------------------------------------------------------------------ //
 
 
@@ -148,7 +187,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     while (numEndedDbSeqs < dbLength) {
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
-        __m128i P[alphabetLength];
+        __mxxxi P[alphabetLength];
         typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(16)));
         for (unsigned char letter = 0; letter < alphabetLength; letter++) {
             int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
@@ -157,35 +196,35 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 if (dbSeqPos != 0)
                     profileRow[i] = (typename SIMD::type)scoreMatrixRow[*dbSeqPos];
             }
-            P[letter] = _mm_load_si128((__m128i const*)profileRow);
+            P[letter] = _mmxxx_load_si((__mxxxi const*)profileRow);
         }
         // ---------------------------------------------------------------------- //
         
         // Previous cells: u - up, l - left, ul - up left
-        __m128i uF, uH, ulH; 
+        __mxxxi uF, uH, ulH; 
         uF = uH = ulH = scoreZeroes; // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
 
-        __m128i ofTest = scoreZeroes; // Used for detecting the overflow when not using saturated ar
+        __mxxxi ofTest = scoreZeroes; // Used for detecting the overflow when not using saturated ar
 
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
             // Calculate E = max(lH-Q, lE-R)
-            __m128i E = SIMD::max(SIMD::sub(prevHs[r], Q), SIMD::sub(prevEs[r], R));
+            __mxxxi E = SIMD::max(SIMD::sub(prevHs[r], Q), SIMD::sub(prevEs[r], R));
 
             // Calculate F = max(uH-Q, uF-R)
-            __m128i F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R));
+            __mxxxi F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R));
 
             // Calculate H
-            __m128i H = SIMD::max(F, E);
+            __mxxxi H = SIMD::max(F, E);
             if (!SIMD::negRange) // If not using negative range, then H could be negative at this moment so we need this
                 H = SIMD::max(H, zeroes);
-            __m128i ulH_P = SIMD::add(ulH, P[query[r]]); // If using negative range: if ulH_P >= 0 then we have overflow
+            __mxxxi ulH_P = SIMD::add(ulH, P[query[r]]); // If using negative range: if ulH_P >= 0 then we have overflow
 
             H = SIMD::max(H, ulH_P); // If using negative range: H will always be negative, even if ulH_P overflowed
 
             // Save data needed for overflow detection. Not more then one condition will fire
             if (SIMD::negRange)
-                ofTest = _mm_and_si128(ofTest, ulH_P);
+                ofTest = _mmxxx_and_si(ofTest, ulH_P);
             if (!SIMD::satArthm)
                 ofTest = SIMD::min(ofTest, ulH_P);
 
@@ -208,7 +247,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         columnsSinceLastSeqEnd++;
 
         typename SIMD::type unpackedMaxH[SIMD::numSeqs];
-        _mm_store_si128((__m128i*)unpackedMaxH, maxH);
+        _mmxxx_store_si((__mxxxi*)unpackedMaxH, maxH);
 
         // ------------------------ OVERFLOW DETECTION -------------------------- //
         if (!SIMD::satArthm) {
@@ -216,7 +255,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             //  - overflow wraps
             //  - Q, R and all scores from scoreMatrix are between LOWER_BOUND/2 and UPPER_BOUND/2 exclusive
             typename SIMD::type unpackedOfTest[SIMD::numSeqs];
-            _mm_store_si128((__m128i*)unpackedOfTest, ofTest);
+            _mmxxx_store_si((__mxxxi*)unpackedOfTest, ofTest);
             for (int i = 0; i < SIMD::numSeqs; i++)
                 if (currDbSeqsPos[i] != 0 && unpackedOfTest[i] <= LOWER_BOUND/2)
                     return SWIMD_ERR_OVERFLOW;
@@ -224,7 +263,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             if (SIMD::negRange) {
                 // Since I use saturation, I check if minUlH_P was non negative
                 typename SIMD::type unpackedOfTest[SIMD::numSeqs];
-                _mm_store_si128((__m128i*)unpackedOfTest, ofTest);
+                _mmxxx_store_si((__mxxxi*)unpackedOfTest, ofTest);
                 for (int i = 0; i < SIMD::numSeqs; i++)
                     if (currDbSeqsPos[i] != 0 && unpackedOfTest[i] >= 0)
                         return SWIMD_ERR_OVERFLOW;
@@ -275,7 +314,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 }
             }
             // Reset prevEs, prevHs and maxH
-            __m128i resetMaskPacked = _mm_load_si128((__m128i const*)resetMask);
+            __mxxxi resetMaskPacked = _mmxxx_load_si((__mxxxi const*)resetMask);
             if (SIMD::negRange) {
                 for (int i = 0; i < queryLength; i++)
                     prevEs[i] = SIMD::add(prevEs[i], resetMaskPacked);
@@ -284,10 +323,10 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 maxH = SIMD::add(maxH, resetMaskPacked);
             } else {
                 for (int i = 0; i < queryLength; i++)
-                    prevEs[i] = _mm_and_si128(prevEs[i], resetMaskPacked);
+                    prevEs[i] = _mmxxx_and_si(prevEs[i], resetMaskPacked);
                 for (int i = 0; i < queryLength; i++)
-                    prevHs[i] = _mm_and_si128(prevHs[i], resetMaskPacked);
-                maxH = _mm_and_si128(maxH, resetMaskPacked);
+                    prevHs[i] = _mmxxx_and_si(prevHs[i], resetMaskPacked);
+                maxH = _mmxxx_and_si(maxH, resetMaskPacked);
             }
             columnsSinceLastSeqEnd = 0;
         } else { // If no sequences ended
@@ -760,6 +799,10 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
                                unsigned char** db, int dbLength, int dbSeqLengths[],
                                int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
                                int scores[], const int mode) {
+#ifdef __AVX2__
+    printf("AVX2!\n");
+#endif
+    
 #ifndef __SSE4_1__
     return SWIMD_ERR_NO_SIMD_SUPPORT;
 #else
