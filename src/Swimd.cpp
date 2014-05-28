@@ -8,19 +8,66 @@ extern "C" {
 #include "Swimd.h"
 
 
+// I define aliases for SSE intrinsics, so they can be used in code not depending on SSE generation.
+// If available, AVX2 is used because it has two times bigger register, thus everything is two times faster.
 #ifdef __AVX2__
+
 const int SIMD_REG_SIZE = 256; //!< number of bits in register
 typedef __m256i __mxxxi; //!< represents register containing integers
 #define _mmxxx_load_si  _mm256_load_si256
 #define _mmxxx_store_si _mm256_store_si256
 #define _mmxxx_and_si   _mm256_and_si256
+
+#define _mmxxx_adds_epi8 _mm256_adds_epi8
+#define _mmxxx_subs_epi8 _mm256_subs_epi8
+#define _mmxxx_min_epu8  _mm256_min_epu8
+#define _mmxxx_min_epi8  _mm256_min_epi8
+#define _mmxxx_max_epu8  _mm256_max_epu8
+#define _mmxxx_max_epi8  _mm256_max_epi8
+#define _mmxxx_set1_epi8 _mm256_set1_epi8
+
+#define _mmxxx_adds_epi16 _mm256_adds_epi16
+#define _mmxxx_subs_epi16 _mm256_subs_epi16
+#define _mmxxx_min_epi16  _mm256_min_epi16
+#define _mmxxx_max_epi16  _mm256_max_epi16
+#define _mmxxx_set1_epi16 _mm256_set1_epi16
+
+#define _mmxxx_add_epi32 _mm256_add_epi32
+#define _mmxxx_sub_epi32 _mm256_sub_epi32
+#define _mmxxx_min_epi32  _mm256_min_epi32
+#define _mmxxx_max_epi32  _mm256_max_epi32
+#define _mmxxx_set1_epi32 _mm256_set1_epi32
+
 #else // SSE4.1
+
 const int SIMD_REG_SIZE = 128;
 typedef __m128i __mxxxi;
 #define _mmxxx_load_si  _mm_load_si128
 #define _mmxxx_store_si _mm_store_si128
 #define _mmxxx_and_si   _mm_and_si128
+
+#define _mmxxx_adds_epi8 _mm_adds_epi8
+#define _mmxxx_subs_epi8 _mm_subs_epi8
+#define _mmxxx_min_epu8  _mm_min_epu8
+#define _mmxxx_min_epi8  _mm_min_epi8
+#define _mmxxx_max_epu8  _mm_max_epu8
+#define _mmxxx_max_epi8  _mm_max_epi8
+#define _mmxxx_set1_epi8 _mm_set1_epi8
+
+#define _mmxxx_adds_epi16 _mm_adds_epi16
+#define _mmxxx_subs_epi16 _mm_subs_epi16
+#define _mmxxx_min_epi16  _mm_min_epi16
+#define _mmxxx_max_epi16  _mm_max_epi16
+#define _mmxxx_set1_epi16 _mm_set1_epi16
+
+#define _mmxxx_add_epi32 _mm_add_epi32
+#define _mmxxx_sub_epi32 _mm_sub_epi32
+#define _mmxxx_min_epi32  _mm_min_epi32
+#define _mmxxx_max_epi32  _mm_max_epi32
+#define _mmxxx_set1_epi32 _mm_set1_epi32
+
 #endif
+
 
 //------------------------------------ SIMD PARAMETERS ---------------------------------//
 /**
@@ -34,19 +81,11 @@ struct SimdSW<char> {
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
     static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
     static const bool negRange = true; //!< True if it uses negative range for score representation, goes with saturation
-#ifdef __AVX2__
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm256_adds_epi8(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm256_subs_epi8(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm256_min_epu8(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm256_max_epu8(a, b); }
-    static inline __mxxxi set1(int a) { return _mm256_set1_epi8(a); }
-#else
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm_adds_epi8(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm_subs_epi8(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm_min_epu8(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm_max_epu8(a, b); }
-    static inline __mxxxi set1(int a) { return _mm_set1_epi8(a); }
-#endif
+    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_adds_epi8(a, b); }
+    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_subs_epi8(a, b); }
+    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epu8(a, b); }
+    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epu8(a, b); }
+    static inline __mxxxi set1(int a) { return _mmxxx_set1_epi8(a); }
 };
 
 template<>
@@ -55,19 +94,11 @@ struct SimdSW<short> {
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(short));
     static const bool satArthm = true;
     static const bool negRange = false;
-#ifdef __AVX2__
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm256_adds_epi16(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm256_subs_epi16(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm256_min_epi16(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm256_max_epi16(a, b); }
-    static inline __mxxxi set1(int a) { return _mm256_set1_epi16(a); }
-#else
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm_adds_epi16(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm_subs_epi16(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm_min_epi16(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm_max_epi16(a, b); }
-    static inline __mxxxi set1(int a) { return _mm_set1_epi16(a); }
-#endif
+    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_adds_epi16(a, b); }
+    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_subs_epi16(a, b); }
+    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi16(a, b); }
+    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi16(a, b); }
+    static inline __mxxxi set1(int a) { return _mmxxx_set1_epi16(a); }
 };
 
 template<>
@@ -76,19 +107,11 @@ struct SimdSW<int> {
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int));
     static const bool satArthm = false;
     static const bool negRange = false;
-#ifdef __AVX2__
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm256_add_epi32(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm256_sub_epi32(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm256_min_epi32(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm256_max_epi32(a, b); }
-    static inline __mxxxi set1(int a) { return _mm256_set1_epi32(a); }
-#else
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm_add_epi32(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm_sub_epi32(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm_min_epi32(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm_max_epi32(a, b); }
-    static inline __mxxxi set1(int a) { return _mm_set1_epi32(a); }
-#endif    
+    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_add_epi32(a, b); }
+    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_sub_epi32(a, b); }
+    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi32(a, b); }
+    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi32(a, b); }
+    static inline __mxxxi set1(int a) { return _mmxxx_set1_epi32(a); }
 };
 //--------------------------------------------------------------------------------------//
 
@@ -418,19 +441,11 @@ struct Simd<char> {
     typedef char type; //!< Type that will be used for score
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
     static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
-#ifdef __AVX2__
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm256_adds_epi8(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm256_subs_epi8(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm256_min_epi8(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm256_max_epi8(a, b); }
-    static inline __mxxxi set1(int a) { return _mm256_set1_epi8(a); }
-#else
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm_adds_epi8(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm_subs_epi8(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm_min_epi8(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm_max_epi8(a, b); }
-    static inline __mxxxi set1(int a) { return _mm_set1_epi8(a); }
-#endif
+    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_adds_epi8(a, b); }
+    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_subs_epi8(a, b); }
+    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi8(a, b); }
+    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi8(a, b); }
+    static inline __mxxxi set1(int a) { return _mmxxx_set1_epi8(a); }
 };
 
 template<>
@@ -438,19 +453,11 @@ struct Simd<short> {
     typedef short type;
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(short));
     static const bool satArthm = true;
-#ifdef __AVX2__
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm256_adds_epi16(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm256_subs_epi16(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm256_min_epi16(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm256_max_epi16(a, b); }
-    static inline __mxxxi set1(int a) { return _mm256_set1_epi16(a); }
-#else
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm_adds_epi16(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm_subs_epi16(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm_min_epi16(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm_max_epi16(a, b); }
-    static inline __mxxxi set1(int a) { return _mm_set1_epi16(a); }
-#endif
+    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_adds_epi16(a, b); }
+    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_subs_epi16(a, b); }
+    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi16(a, b); }
+    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi16(a, b); }
+    static inline __mxxxi set1(int a) { return _mmxxx_set1_epi16(a); }
 };
 
 template<>
@@ -458,19 +465,11 @@ struct Simd<int> {
     typedef int type;
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int));
     static const bool satArthm = false;
-#ifdef __AVX2__
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm256_add_epi32(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm256_sub_epi32(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm256_min_epi32(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm256_max_epi32(a, b); }
-    static inline __mxxxi set1(int a) { return _mm256_set1_epi32(a); }
-#else
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm_add_epi32(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm_sub_epi32(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm_min_epi32(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm_max_epi32(a, b); }
-    static inline __mxxxi set1(int a) { return _mm_set1_epi32(a); }
-#endif
+    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_add_epi32(a, b); }
+    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_sub_epi32(a, b); }
+    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi32(a, b); }
+    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi32(a, b); }
+    static inline __mxxxi set1(int a) { return _mmxxx_set1_epi32(a); }
 };
 //--------------------------------------------------------------------------------------//
 
