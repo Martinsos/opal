@@ -11,10 +11,10 @@ By compiling code with makefile and running ./test, you can see if you have SSE4
 
 #### Alignment modes
 Swimd offers 4 different modes of alignment: 1 local and 3 global modes, explained below.
-* SW: Local alignment (Smith-Waterman).
-* NW: Global alignment (Needleman-Wunsch).
-* HW: Semi-global alignment. Insertions before query start and insertions after query end are not penalized.
-* OV: Semi-global alignment. Insertions before start of either query or target and insertions after end of either query or target are not penalized.
+* SW: Local alignment (Smith-Waterman). Useful for finding similar regions in not necessarily similar sequences, and also for finding shorter sequence in longer sequence (text searching).
+* NW: Global alignment (Needleman-Wunsch). Useful for detecting if two sequences of similar lengths are similar.
+* HW: Semi-global alignment. Insertions before query start and insertions after query end are not penalized. Useful for finding query in target.
+* OV: Semi-global alignment. Insertions before start of either query or target and insertions after end of either query or target are not penalized. Useful when sequences are partially overlaping or one of sequences is contained in another.
 
 #### Usage
 To use Swimd you just have to include Swimd.h in your code and compile your code together with Swimd.cpp using appropriate compiler flag for SSE, for example -msse4.1 (or just use -march which will detect your arhitecture and will also use appropriate SSE flag).  
