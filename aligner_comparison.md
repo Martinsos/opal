@@ -22,12 +22,13 @@ How aligners were called:
 * SWIPE: `./swipe -a 1 -p 1 -G 3 -E 1 -M BLOSUM50 -b 0 -i <query_file> -d uniprot_sprot` NOTE: database had to be preprocessed for SWIPE using _makeblastdb_
 
 Following table shows how much time took for different sequences to be aligned against UniProtKB/Swiss-Prot database.
-All times are in seconds. Tests were performed on Intel Core i3 M 350 @ 2.27GHz with 4GB RAM.
+All times are in seconds. Test were performed on i7-4770K CPU @ 3.50GHz with 32GB RAM (AVX2 support).
 
-|                  | O74807 | P19930 | Q3ZAI3 | P18080 |
-|------------------|--------|--------|--------|--------|
-| **query length** |   110  |   195  |   390  |   513  |
-| **SSW**          |  20.2  |  36.4  |  54.4  |  68.4  |
-| **_SWIMD_**      |  18.2  |  26.6  |  46.0  |  60.5  |
-| **SSEARCH**      |  16.8  |  27.3  |  38.6  |  48.2  |
-| **SWIPE**        |   9.6  |  17.0  |  32.1  |  41.5  |
+|                     | O74807 | P19930 | Q3ZAI3 | P18080 |
+|---------------------|--------|--------|--------|--------|
+| **query length**    |   110  |   195  |   390  |   513  |
+| **SSW**             |   9.0  |  16.6  |  25.8  |  31.0  |
+| **_SWIMD(SSE4.1)_** |   8.7  |  12.2  |  20.2  |  25.5  |
+| **_SWIMD(AVX2)_**   |   5.2  |   6.9  |  10.8  |  14.7  |
+| **SSEARCH**         |   7.0  |  11.7  |  18.3  |  22.4  |
+| **SWIPE**           |   5.3  |   9.5  |  17.8  |  23.1  |
