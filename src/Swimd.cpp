@@ -136,8 +136,8 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                              int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
                              int scores[], bool calculated[]) {
 
-    static const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
-    static const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
+    const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
+    const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
 
     // ----------------------- CHECK ARGUMENTS -------------------------- //
     // Check if Q, R or scoreMatrix have values too big for used score type
@@ -367,7 +367,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char* &currDbSeqPos, 
                                     int &currDbSeqLength, unsigned char** db, int dbSeqLengths[], bool calculated[],
                                     int &numEndedDbSeqs) {
-    while (calculated[nextDbSeqIdx] && nextDbSeqIdx < dbLength) {
+    while (nextDbSeqIdx < dbLength && calculated[nextDbSeqIdx]) {
         nextDbSeqIdx++;
         numEndedDbSeqs++;
     }
