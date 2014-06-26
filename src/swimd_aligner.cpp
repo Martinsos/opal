@@ -77,6 +77,7 @@ int main(int argc, char * const argv[]) {
     }
     unsigned char* query = (*querySequences)[0].data();
     int queryLength = (*querySequences)[0].size();
+    printf("Read query sequence, %d residues.\n", queryLength);
 
     // Build db
     char* dbFilepath = argv[optind+1];    
@@ -90,12 +91,14 @@ int main(int argc, char * const argv[]) {
     int dbLength = dbSequences->size();
     unsigned char* db[dbLength];
     int dbSeqLengths[dbLength];
+    int dbTotalLength = 0;
     for (int i = 0; i < dbSequences->size(); i++) {
         db[i] = (*dbSequences)[i].data();
         dbSeqLengths[i] = (*dbSequences)[i].size();
+        dbTotalLength += dbSeqLengths[i];
     }
+    printf("Read %d database sequences, %d residues total.\n", dbLength, dbTotalLength);
 
-    printf("Searching...\n");
     // ----------------------------- MAIN CALCULATION ----------------------------- //
     int* scores = new int[dbLength];
     int modeCode;
@@ -111,7 +114,9 @@ int main(int argc, char * const argv[]) {
         printf("Invalid mode!\n");
         return 1;
     }
-    printf("Using mode %s\n", mode);
+    printf("Using %s alignment mode.\n", mode);
+    
+    printf("\nComparing query to database...");
     clock_t start = clock();
     int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
                                          gapOpen, gapExt, scoreMatrix.getMatrix(), alphabetLength,
@@ -119,18 +124,18 @@ int main(int argc, char * const argv[]) {
     clock_t finish = clock();
     double cpuTime = ((double)(finish-start))/CLOCKS_PER_SEC;
     // ---------------------------------------------------------------------------- //
+    printf("\nFinished!\n");
     
     if (!silent) {
-        printf("Scores: \n");
+        printf("\nScores (<database sequence number>: <score>): \n");
         for (int i = 0; i < dbLength; i++)
-            printf("%d ", scores[i]);
-        printf("\n");
+            printf("#%d: %d\n", i, scores[i]);
     }
 
     printf("\nCpu time of searching: %lf\n", cpuTime);
 
     // Print this statistics only for SW because they are not valid for other modes.
-    if (!(strcmp(mode, "SW"))) {
+    /*   if (!(strcmp(mode, "SW"))) {
         int for8, for16, for32;
         for8 = for16 = for32 = 0;
         double averageScore = 0;
@@ -148,7 +153,7 @@ int main(int argc, char * const argv[]) {
         printf("\tFor 16 (< %10d): %8d\n", SHRT_MAX, for16);
         printf("\tFor 32 (< %10d): %8d\n",  INT_MAX, for32);
         printf("\tAverage score: %lf\n", averageScore);
-    }
+        }*/
 
     // Free allocated space
     delete querySequences;

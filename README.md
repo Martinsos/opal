@@ -61,7 +61,7 @@ For more examples of usage take a look at test.cpp and swimd_aligner.cpp.
 In order to compile and use simple aligner that uses Swimd run makefile in src:
 
     cd src
-    make swimd_aligner
+    make
     
 Type `./swimd_aligner` for help.
 
