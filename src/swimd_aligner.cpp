@@ -121,8 +121,8 @@ int main(int argc, char * const argv[]) {
         }
     
         int dbLength = dbSequences->size();
-        unsigned char* db[dbLength];
-        int dbSeqLengths[dbLength];
+        unsigned char** db = new unsigned char*[dbLength];
+        int* dbSeqLengths = new int[dbLength];
         int dbNumResidues = 0;
         for (int i = 0; i < dbSequences->size(); i++) {
             db[i] = (*dbSequences)[i].data();
@@ -134,6 +134,7 @@ int main(int argc, char * const argv[]) {
         // ----------------------------- MAIN CALCULATION ----------------------------- //
         int* scores = new int[dbLength];    
         printf("\nComparing query to database...");
+        fflush(stdout);
         clock_t start = clock();
         int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
                                              gapOpen, gapExt, scoreMatrix.getMatrix(), alphabetLength,
@@ -151,8 +152,10 @@ int main(int argc, char * const argv[]) {
 
         wholeDbLength += dbLength;
         
-        delete dbSequences;
+        delete[] db;
+        delete[] dbSeqLengths;
         delete[] scores;
+        delete dbSequences;
     }
 
     printf("\nCpu time of searching: %lf\n", cpuTime);
@@ -189,7 +192,7 @@ int main(int argc, char * const argv[]) {
 
 
 
-/** Reads sequences from fasta file. If it reads more than 1GB of sequences, it will stop.
+/** Reads sequences from fasta file. If it reads more than some amount of sequences, it will stop.
  * @param [in] file File pointer to database. It may not be the beginning of database.
  * @param [in] alphabet
  * @param [in] alphabetLength
