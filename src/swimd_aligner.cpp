@@ -112,7 +112,7 @@ int main(int argc, char * const argv[]) {
     bool wholeDbRead = false;
     while (!wholeDbRead) {
         vector< vector<unsigned char> >* dbSequences = new vector< vector<unsigned char> >();
-        printf("Reading database fasta file...\n");
+        printf("\nReading database fasta file...\n");
         wholeDbRead = readFastaSequences(dbFile, alphabet, alphabetLength, dbSequences);
         if (wholeDbRead) {
             printf("Whole database read!\n");
@@ -229,13 +229,13 @@ bool readFastaSequences(FILE* &file, char* alphabet, int alphabetLength, vector<
                     if (c == '\r' || c == '\n')
                         continue;
                     // If starting new sequence, initialize it.
-                    // Before that, check if we read more than 100MB of sequences,
+                    // Before that, check if we read more than 1GB of sequences,
                     // and if that is true, finish reading.
                     if (inSequence == false) {
                         if (seqs->size() > 0) {
                             numResiduesRead += seqs->back().size();
                         }
-                        if (numResiduesRead > 104857600L) {
+                        if (numResiduesRead > 1073741824L) {
                             fseek(file, i - read, SEEK_CUR);
                             return false;
                         }
