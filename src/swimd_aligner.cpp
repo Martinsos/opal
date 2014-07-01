@@ -153,7 +153,7 @@ int main(int argc, char * const argv[]) {
         
         delete dbSequences;
         delete[] scores;
-        if (wholeDbRead) break;
+        if (wholeDbRead) break;  // TODO: IT DOES NOT WORK IF I REMOVE THIS, WHY????
     }
 
     printf("\nCpu time of searching: %lf\n", cpuTime);
