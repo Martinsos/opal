@@ -113,7 +113,7 @@ int main(int argc, char * const argv[]) {
     while (!wholeDbRead) {
         vector< vector<unsigned char> >* dbSequences = new vector< vector<unsigned char> >();
         printf("Reading database fasta file...\n");
-        bool wholeDbRead = readFastaSequences(dbFile, alphabet, alphabetLength, dbSequences);
+        wholeDbRead = readFastaSequences(dbFile, alphabet, alphabetLength, dbSequences);
         if (wholeDbRead) {
             printf("Whole database read!\n");
         } else {
@@ -153,7 +153,6 @@ int main(int argc, char * const argv[]) {
         
         delete dbSequences;
         delete[] scores;
-        if (wholeDbRead) break;  // TODO: IT DOES NOT WORK IF I REMOVE THIS, WHY????
     }
 
     printf("\nCpu time of searching: %lf\n", cpuTime);
