@@ -12,7 +12,7 @@
 
 using namespace std;
 
-int readFastaSequences(const char* path, char* alphabet, int alphabetLength, vector< vector<unsigned char> >* seqs);
+bool readFastaSequences(FILE* &file, char* alphabet, int alphabetLength, vector< vector<unsigned char> >* seqs);
 
 int main(int argc, char * const argv[]) {
     int gapOpen = 3;
@@ -65,42 +65,8 @@ int main(int argc, char * const argv[]) {
     char* alphabet = scoreMatrix.getAlphabet();
     int alphabetLength = scoreMatrix.getAlphabetLength();
 
-    int readResult;
-    // Build query
-    char* queryFilepath = argv[optind];
-    vector< vector<unsigned char> >* querySequences = new vector< vector<unsigned char> >();
-    printf("Reading query fasta file...\n");
-    readResult = readFastaSequences(queryFilepath, alphabet, alphabetLength, querySequences);
-    if (readResult) {
-        printf("Error: There is no file with name %s\n", queryFilepath);
-        return 1;
-    }
-    unsigned char* query = (*querySequences)[0].data();
-    int queryLength = (*querySequences)[0].size();
-    printf("Read query sequence, %d residues.\n", queryLength);
 
-    // Build db
-    char* dbFilepath = argv[optind+1];    
-    vector< vector<unsigned char> >* dbSequences = new vector< vector<unsigned char> >();
-    printf("Reading database fasta file...\n");
-    readResult = readFastaSequences(dbFilepath, alphabet, alphabetLength, dbSequences);
-    if (readResult) {
-        printf("Error: There is no file with name %s\n", dbFilepath);
-        return 1;
-    }
-    int dbLength = dbSequences->size();
-    unsigned char* db[dbLength];
-    int dbSeqLengths[dbLength];
-    int dbTotalLength = 0;
-    for (int i = 0; i < dbSequences->size(); i++) {
-        db[i] = (*dbSequences)[i].data();
-        dbSeqLengths[i] = (*dbSequences)[i].size();
-        dbTotalLength += dbSeqLengths[i];
-    }
-    printf("Read %d database sequences, %d residues total.\n", dbLength, dbTotalLength);
-
-    // ----------------------------- MAIN CALCULATION ----------------------------- //
-    int* scores = new int[dbLength];
+    // Detect mode
     int modeCode;
     if (!strcmp(mode, "SW"))
         modeCode = SWIMD_MODE_SW;
@@ -115,24 +81,83 @@ int main(int argc, char * const argv[]) {
         return 1;
     }
     printf("Using %s alignment mode.\n", mode);
+
+    int readResult;
+    // Build query
+    char* queryFilepath = argv[optind];
+    FILE* queryFile = fopen(queryFilepath, "r");
+    if (queryFile == 0) {
+        printf("Error: There is no file with name %s\n", queryFilepath);
+        return 1;
+    }
+    vector< vector<unsigned char> >* querySequences = new vector< vector<unsigned char> >();
+    printf("Reading query fasta file...\n");
+    readFastaSequences(queryFile, alphabet, alphabetLength, querySequences);
+    unsigned char* query = (*querySequences)[0].data();
+    int queryLength = (*querySequences)[0].size();
+    printf("Read query sequence, %d residues.\n", queryLength);
+    fclose(queryFile);
+
+
+    // Build db
+    char* dbFilepath = argv[optind+1];
+    FILE* dbFile = fopen(dbFilepath, "r");
+    int wholeDbLength = 0;
+    if (dbFile == 0) {
+        printf("Error: There is no file with name %s\n", dbFilepath);
+        return 1;
+    }
+
+    double cpuTime = 0;
+    bool wholeDbRead = false;
+    while (!wholeDbRead) {
+        vector< vector<unsigned char> >* dbSequences = new vector< vector<unsigned char> >();
+        printf("Reading database fasta file...\n");
+        bool wholeDbRead = readFastaSequences(dbFile, alphabet, alphabetLength, dbSequences);
+        if (wholeDbRead) {
+            printf("Whole database read!\n");
+        } else {
+            printf("Chunk of database read!\n");
+        }
     
-    printf("\nComparing query to database...");
-    clock_t start = clock();
-    int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
-                                         gapOpen, gapExt, scoreMatrix.getMatrix(), alphabetLength,
-                                         scores, modeCode);
-    clock_t finish = clock();
-    double cpuTime = ((double)(finish-start))/CLOCKS_PER_SEC;
-    // ---------------------------------------------------------------------------- //
-    printf("\nFinished!\n");
+        int dbLength = dbSequences->size();
+        unsigned char* db[dbLength];
+        int dbSeqLengths[dbLength];
+        int dbNumResidues = 0;
+        for (int i = 0; i < dbSequences->size(); i++) {
+            db[i] = (*dbSequences)[i].data();
+            dbSeqLengths[i] = (*dbSequences)[i].size();
+            dbNumResidues += dbSeqLengths[i];
+        }
+        printf("Read %d database sequences, %d residues total.\n", dbLength, dbNumResidues);
+
+        // ----------------------------- MAIN CALCULATION ----------------------------- //
+        int* scores = new int[dbLength];    
+        printf("\nComparing query to database...");
+        clock_t start = clock();
+        int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
+                                             gapOpen, gapExt, scoreMatrix.getMatrix(), alphabetLength,
+                                             scores, modeCode);
+        clock_t finish = clock();
+        cpuTime += ((double)(finish-start))/CLOCKS_PER_SEC;
+        // ---------------------------------------------------------------------------- //
+        printf("\nFinished!\n");
     
-    if (!silent) {
-        printf("\nScores (<database sequence number>: <score>): \n");
-        for (int i = 0; i < dbLength; i++)
-            printf("#%d: %d\n", i, scores[i]);
+        if (!silent) {
+            printf("\nScores (<database sequence number>: <score>): \n");
+            for (int i = 0; i < dbLength; i++)
+                printf("#%d: %d\n", wholeDbLength + i, scores[i]);
+        }
+
+        wholeDbLength += dbLength;
+        
+        delete dbSequences;
+        delete[] scores;
+        if (wholeDbRead) break;
     }
 
     printf("\nCpu time of searching: %lf\n", cpuTime);
+    printf("Read %d database sequences in total.\n", wholeDbLength);
 
     // Print this statistics only for SW because they are not valid for other modes.
     /*   if (!(strcmp(mode, "SW"))) {
@@ -155,10 +180,9 @@ int main(int argc, char * const argv[]) {
         printf("\tAverage score: %lf\n", averageScore);
         }*/
 
+    fclose(dbFile);
     // Free allocated space
     delete querySequences;
-    delete dbSequences;
-    delete[] scores;
     
     return 0;
 }
@@ -166,19 +190,15 @@ int main(int argc, char * const argv[]) {
 
 
 
-/** Reads sequences from fasta file.
- * @param [in] path Path to fasta file containing sequences.
+/** Reads sequences from fasta file. If it reads more than 1GB of sequences, it will stop.
+ * @param [in] file File pointer to database. It may not be the beginning of database.
  * @param [in] alphabet
  * @param [in] alphabetLength
  * @param [out] seqs Sequences will be stored here, each sequence as vector of indexes from alphabet.
- * @return 0 if all ok, positive number otherwise.
+ * @return true if reached end of file, otherwise false.
  */
-int readFastaSequences(const char* path, char* alphabet, int alphabetLength, vector< vector<unsigned char> >* seqs) {
+bool readFastaSequences(FILE* &file, char* alphabet, int alphabetLength, vector< vector<unsigned char> >* seqs) {
     seqs->clear();
-    
-    FILE* file = fopen(path, "r");
-    if (file == 0)
-        return 1;
 
     unsigned char letterIdx[128]; //!< letterIdx[c] is index of letter c in alphabet
     for (int i = 0; i < alphabetLength; i++)
@@ -190,6 +210,7 @@ int readFastaSequences(const char* path, char* alphabet, int alphabetLength, vec
     for (int i = 0; i < alphabetLength; i++)
         letterIdx[alphabet[i]] = i;
 
+    long numResiduesRead = 0;
     bool inHeader = false;
     bool inSequence = false;
     int buffSize = 4096;
@@ -209,7 +230,16 @@ int readFastaSequences(const char* path, char* alphabet, int alphabetLength, vec
                     if (c == '\r' || c == '\n')
                         continue;
                     // If starting new sequence, initialize it.
+                    // Before that, check if we read more than 100MB of sequences,
+                    // and if that is true, finish reading.
                     if (inSequence == false) {
+                        if (seqs->size() > 0) {
+                            numResiduesRead += seqs->back().size();
+                        }
+                        if (numResiduesRead > 104857600L) {
+                            fseek(file, i - read, SEEK_CUR);
+                            return false;
+                        }
                         inSequence = true;
                         seqs->push_back(vector<unsigned char>());
                     }
@@ -220,8 +250,7 @@ int readFastaSequences(const char* path, char* alphabet, int alphabetLength, vec
         }
     }
 
-    fclose(file);
-    return 0;
+    return true;
 }
  
 
