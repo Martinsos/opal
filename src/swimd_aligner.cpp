@@ -18,48 +18,45 @@ int main(int argc, char * const argv[]) {
     int gapOpen = 3;
     int gapExt = 1;
     ScoreMatrix scoreMatrix;
-    
+
     //----------------------------- PARSE COMMAND LINE ------------------------//
-    string scoreMatrixName = "Blosum50";
-    bool scoreMatrixFileGiven = false;
-    char scoreMatrixFilepath[512];
-    bool silent = false;
+    const char *scoreMatrixName = "BLOSUM50";
+    int view = 0;
     char mode[16] = "SW";
     int option;
-    while ((option = getopt(argc, argv, "a:o:e:m:f:s")) >= 0) {
+    while ((option = getopt(argc, argv, "p:G:E:M:m")) >= 0) {
         switch (option) {
-        case 'a': strcpy(mode, optarg); break;
-        case 'o': gapOpen = atoi(optarg); break;
-        case 'e': gapExt = atoi(optarg); break;
-        case 'm': scoreMatrixName = string(optarg); break;
-        case 'f': scoreMatrixFileGiven = true; strcpy(scoreMatrixFilepath, optarg); break;
-        case 's': silent = true; break;
+        case 'p': strcpy(mode, optarg); break;
+        case 'G': gapOpen = atoi(optarg); break;
+        case 'E': gapExt = atoi(optarg); break;
+        case 'M': scoreMatrixName = optarg; break;
+        case 'm': view = atoi(optarg); break;
         }
     }
     if (optind + 2 != argc) {
         fprintf(stderr, "\n");
-        fprintf(stderr, "Usage: swimd_aligner [options...] <query.fasta> <db.fasta>\n");        
+        fprintf(stderr, "Usage: swimd_aligner [options...] <query.fasta> <db.fasta>\n");
         fprintf(stderr, "Options:\n");
-        fprintf(stderr, "\t-g N  N is gap opening penalty. [default: 3]\n");
-        fprintf(stderr, "\t-e N  N is gap extension penalty. [default: 1]\n");
-        fprintf(stderr, "\t-m Blosum50  Score matrix to be used. [default: Blosum50]\n"); 
-        fprintf(stderr, "\t-f FILE  FILE contains score matrix and some additional data. Overrides -m.\n");
+        fprintf(stderr, "\t-G N  N is gap opening penalty. [default: 3]\n");
+        fprintf(stderr, "\t-E N  N is gap extension penalty. [default: 1]\n");
+        fprintf(stderr, "\t-M BLOSUM50/FILE  Score matrix name or filename to be used. [default: BLOSUM50]\n");
         fprintf(stderr, "\t-s  If specified, there will be no score output (silent mode).\n");
-        fprintf(stderr, "\t-a SW|NW|HW|OV  Alignment mode that will be used. [default: SW]\n");
+        fprintf(stderr, "\t-p SW|NW|HW|OV  Alignment mode that will be used. [default: SW]\n");
         return 1;
     }
     //-------------------------------------------------------------------------//
 
     // Set score matrix by name
-    if (scoreMatrixName == "Blosum50") 
+    if (strncasecmp(scoreMatrixName, "BLOSUM50", 8) == 0)
         scoreMatrix = ScoreMatrix::getBlosum50();
     else {
-        fprintf(stderr, "Given score matrix name is not valid\n");
-        exit(1);
-    }
-    // Set score matrix by filepath
-    if (scoreMatrixFileGiven) {
-        scoreMatrix = ScoreMatrix(scoreMatrixFilepath);
+        fprintf(stderr, "Given score matrix name is not valid. Interprete it as a file name ...\n");
+        // Set score matrix by filepath
+        scoreMatrix = ScoreMatrix(scoreMatrixName);
+        if (scoreMatrix.getAlphabetLength() == 0) {
+            fprintf(stderr, "Given score matrix file is not valid.\n");
+            exit(1);
+        }
     }
 
     char* alphabet = scoreMatrix.getAlphabet();
@@ -119,7 +116,7 @@ int main(int argc, char * const argv[]) {
         } else {
             printf("Chunk of database read!\n");
         }
-    
+
         int dbLength = dbSequences->size();
         unsigned char** db = new unsigned char*[dbLength];
         int* dbSeqLengths = new int[dbLength];
@@ -132,7 +129,7 @@ int main(int argc, char * const argv[]) {
         printf("Read %d database sequences, %d residues total.\n", dbLength, dbNumResidues);
 
         // ----------------------------- MAIN CALCULATION ----------------------------- //
-        int* scores = new int[dbLength];    
+        int* scores = new int[dbLength];
         printf("\nComparing query to database...");
         fflush(stdout);
         clock_t start = clock();
@@ -143,15 +140,15 @@ int main(int argc, char * const argv[]) {
         cpuTime += ((double)(finish-start))/CLOCKS_PER_SEC;
         // ---------------------------------------------------------------------------- //
         printf("\nFinished!\n");
-    
-        if (!silent) {
+
+        if (!view) {
             printf("\nScores (<database sequence number>: <score>): \n");
             for (int i = 0; i < dbLength; i++)
                 printf("#%d: %d\n", wholeDbLength + i, scores[i]);
         }
 
         wholeDbLength += dbLength;
-        
+
         delete[] db;
         delete[] dbSeqLengths;
         delete[] scores;
@@ -185,7 +182,7 @@ int main(int argc, char * const argv[]) {
     fclose(dbFile);
     // Free allocated space
     delete querySequences;
-    
+
     return 0;
 }
 
@@ -254,5 +251,5 @@ bool readFastaSequences(FILE* &file, char* alphabet, int alphabetLength, vector<
 
     return true;
 }
- 
+
 
