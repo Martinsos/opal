@@ -40,7 +40,7 @@ int main(int argc, char * const argv[]) {
         fprintf(stderr, "\t-G N  N is gap opening penalty. [default: 3]\n");
         fprintf(stderr, "\t-E N  N is gap extension penalty. [default: 1]\n");
         fprintf(stderr, "\t-M BLOSUM50/FILE  Score matrix name or filename to be used. [default: BLOSUM50]\n");
-        fprintf(stderr, "\t-s  If specified, there will be no score output (silent mode).\n");
+        fprintf(stderr, "\t-m Output format [0=silent,>0=score only] (0)\n");
         fprintf(stderr, "\t-p SW|NW|HW|OV  Alignment mode that will be used. [default: SW]\n");
         return 1;
     }
