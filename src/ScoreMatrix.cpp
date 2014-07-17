@@ -9,7 +9,7 @@ using namespace std;
 
 ScoreMatrix::ScoreMatrix() {}
 
-ScoreMatrix::ScoreMatrix(vector<char> alphabet, vector<int> matrix) {
+ScoreMatrix::ScoreMatrix(vector<unsigned char> alphabet, vector<int> matrix) {
     this->alphabet = alphabet;
     this->matrix = matrix;
 }
@@ -39,7 +39,7 @@ int ScoreMatrix::getAlphabetLength() {
     return alphabet.size();
 }
 
-char* ScoreMatrix::getAlphabet() {
+unsigned char* ScoreMatrix::getAlphabet() {
     return alphabet.data();
 }
 
@@ -48,10 +48,10 @@ int* ScoreMatrix::getMatrix() {
 }
     
 
-vector<char> ScoreMatrix::getBlosumAlphabet() {
-    char alphabet[24] = {'A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 
+vector<unsigned char> ScoreMatrix::getBlosumAlphabet() {
+    unsigned char alphabet[24] = {'A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 
                          'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V', 'B', 'Z', 'X', '*'};
-    return vector<char>(alphabet, alphabet+24);
+    return vector<unsigned char>(alphabet, alphabet+24);
 }
 
 ScoreMatrix ScoreMatrix::getBlosum50() {
