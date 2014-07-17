@@ -1,6 +1,6 @@
 CC = g++
 # -march=native will compile for correct simd
-CFLAGS = -march=native -O3
+CFLAGS = -march=native -O3 -Wall
 
 DEBUG ?= 0
 ifeq ($(DEBUG), 1)

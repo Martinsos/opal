@@ -23,7 +23,6 @@ int maximum(int a[], int aLength);
 int main(int argc, char * const argv[]) {
 
     char mode[32] = "SW"; // "SW", "NW", "HW" or "OV"
-    int option;
     if (argc > 1) {
         strcpy(mode, argv[1]);
     }
@@ -211,8 +210,8 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
         }
         int maxLastRowH = INT_MIN;
 
-        int maxH; // max H in column
-        int H;
+        int maxH = INT_MIN; // max H in column
+        int H = INT_MIN;
         for (int c = 0; c < dbSeqLengths[seqIdx]; c++) {
             int uF, uH, ulH;
             uF = LOWER_SCORE_BOUND;
