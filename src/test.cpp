@@ -92,7 +92,7 @@ int main(int argc, char * const argv[]) {
                                      gapOpen, gapExt, scoreMatrix, alphabetLength, scores,
                                      modeCode, SWIMD_OVERFLOW_SIMPLE);
     finish = clock();
-    double time1 = ((double)(finish-start))/CLOCKS_PER_SEC;
+    double time1 = ((double)(finish-start)) / CLOCKS_PER_SEC;
     printf("Time: %lf\n", time1);
 
     if (resultCode != 0) {
