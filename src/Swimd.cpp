@@ -130,14 +130,21 @@ void print_mmxxxi(__mxxxi mm) {
         printf("%d ", unpacked[i]);
 }
 
+/**
+ * @param stopOnOverflow  If true, function will stop when first overflow happens.
+ *            If false, function will not stop but continue with next sequence.
+ *                        
+ */
 template<class SIMD>
 static int searchDatabaseSW_(unsigned char query[], int queryLength, 
                              unsigned char** db, int dbLength, int dbSeqLengths[],
                              int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                             int scores[], bool calculated[]) {
+                             int scores[], bool calculated[], const int overflowMethod) {
 
     const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
+    
+    bool overflowOccured = false;  // True if overflow was detected at least once.
 
     // ----------------------- CHECK ARGUMENTS -------------------------- //
     // Check if Q, R or scoreMatrix have values too big for used score type
@@ -273,48 +280,62 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         _mmxxx_store_si((__mxxxi*)unpackedMaxH, maxH);
 
         // ------------------------ OVERFLOW DETECTION -------------------------- //
+        bool overflowDetected = false;  // True if overflow was detected for this column.
+        bool overflowed[SIMD::numSeqs];
         if (!SIMD::satArthm) {
             // This check is based on following assumptions: 
             //  - overflow wraps
             //  - Q, R and all scores from scoreMatrix are between LOWER_BOUND/2 and UPPER_BOUND/2 exclusive
             typename SIMD::type unpackedOfTest[SIMD::numSeqs];
             _mmxxx_store_si((__mxxxi*)unpackedOfTest, ofTest);
-            for (int i = 0; i < SIMD::numSeqs; i++)
-                if (currDbSeqsPos[i] != 0 && unpackedOfTest[i] <= LOWER_BOUND/2)
-                    return SWIMD_ERR_OVERFLOW;
+            for (int i = 0; i < SIMD::numSeqs; i++) {
+                overflowed[i] = currDbSeqsPos[i] != 0 &&
+                    unpackedOfTest[i] <= LOWER_BOUND / 2;
+            }
         } else {
             if (SIMD::negRange) {
                 // Since I use saturation, I check if minUlH_P was non negative
                 typename SIMD::type unpackedOfTest[SIMD::numSeqs];
                 _mmxxx_store_si((__mxxxi*)unpackedOfTest, ofTest);
-                for (int i = 0; i < SIMD::numSeqs; i++)
-                    if (currDbSeqsPos[i] != 0 && unpackedOfTest[i] >= 0)
-                        return SWIMD_ERR_OVERFLOW;
+                for (int i = 0; i < SIMD::numSeqs; i++) {
+                    overflowed[i] = currDbSeqsPos[i] != 0 && unpackedOfTest[i] >= 0;
+                }
             } else {
                 // I check if upper bound is reached
-                for (int i = 0; i < SIMD::numSeqs; i++)
-                    if (currDbSeqsPos[i] != 0 && unpackedMaxH[i] == UPPER_BOUND) {
-                        return SWIMD_ERR_OVERFLOW;
-                    }
+                for (int i = 0; i < SIMD::numSeqs; i++) {
+                    overflowed[i] = currDbSeqsPos[i] != 0 &&
+                        unpackedMaxH[i] == UPPER_BOUND;
+                }
             }
         }
+        for (int i = 0; i < SIMD::numSeqs; i++) {
+            overflowDetected = overflowDetected || overflowed[i];
+        }
+        overflowOccured = overflowOccured || overflowDetected;
+        // In buckets method, we stop calculation when overflow is detected.
+        if (overflowMethod == SWIMD_OVERFLOW_BUCKETS && overflowDetected) {
+            return SWIMD_ERR_OVERFLOW;
+        }
+        
         // ---------------------------------------------------------------------- //
 
         // --------------------- CHECK AND HANDLE SEQUENCE END ------------------ //
-        if (shortestDbSeqLength == columnsSinceLastSeqEnd) { // If at least one sequence ended
+        if (overflowDetected || shortestDbSeqLength == columnsSinceLastSeqEnd) { // If at least one sequence ended
             shortestDbSeqLength = -1;
             typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(16)));
 
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 if (currDbSeqsPos[i] != 0) { // If not null sequence
                     currDbSeqsLengths[i] -= columnsSinceLastSeqEnd;
-                    if (currDbSeqsLengths[i] == 0) { // If sequence ended
+                    if (overflowed[i] || currDbSeqsLengths[i] == 0) { // If sequence ended
                         numEndedDbSeqs++;
-                        // Save best sequence score
-                        scores[currDbSeqsIdxs[i]] = unpackedMaxH[i];
-                        if (SIMD::negRange)
-                            scores[currDbSeqsIdxs[i]] -= LOWER_BOUND;
-                        calculated[currDbSeqsIdxs[i]] = true;
+                        if (!overflowed[i]) {
+                            // Save score and mark as calculated
+                            scores[currDbSeqsIdxs[i]] = unpackedMaxH[i];
+                            if (SIMD::negRange)
+                                scores[currDbSeqsIdxs[i]] -= LOWER_BOUND;
+                            calculated[currDbSeqsIdxs[i]] = true;
+                        }
                         // Load next sequence
                         loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
                                          currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs);
@@ -361,6 +382,9 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         // ---------------------------------------------------------------------- //
     }
 
+    if (overflowOccured) {
+        return SWIMD_ERR_OVERFLOW;
+    }
     return 0;
 }
 
@@ -384,12 +408,13 @@ static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDb
     }
 }
 
-extern int searchDatabaseSW(unsigned char query[], int queryLength, 
+static int searchDatabaseSW(unsigned char query[], int queryLength, 
                             unsigned char** db, int dbLength, int dbSeqLengths[],
                             int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                            int scores[]) {
+                            int scores[], const int overflowMethod) {
     int resultCode = 0;
-    const int chunkSize = 1024;
+    // Do buckets only if using buckets overflow method.
+    const int chunkSize = overflowMethod == SWIMD_OVERFLOW_BUCKETS ? 1024 : dbLength;
     bool* calculated = new bool[chunkSize];
     for (int startIdx = 0; startIdx < dbLength; startIdx += chunkSize) {
         unsigned char** db_ = db + startIdx;
@@ -401,17 +426,17 @@ extern int searchDatabaseSW(unsigned char query[], int queryLength,
         resultCode = searchDatabaseSW_< SimdSW<char> >(query, queryLength, 
                                                        db_, dbLength_, dbSeqLengths_, 
                                                        gapOpen, gapExt, scoreMatrix, alphabetLength, scores_,
-                                                       calculated);
-        if (resultCode != 0) {
+                                                       calculated, overflowMethod);
+        if (resultCode == SWIMD_ERR_OVERFLOW) {
             resultCode = searchDatabaseSW_< SimdSW<short> >(query, queryLength,
                                                             db_, dbLength_, dbSeqLengths_,
                                                             gapOpen, gapExt, scoreMatrix, alphabetLength, scores_,
-                                                            calculated);
-            if (resultCode != 0) {
+                                                            calculated, overflowMethod);
+            if (resultCode == SWIMD_ERR_OVERFLOW) {
                 resultCode = searchDatabaseSW_< SimdSW<int> >(query, queryLength,
                                                               db_, dbLength_, dbSeqLengths_,
                                                               gapOpen, gapExt, scoreMatrix, alphabetLength, scores_,
-                                                              calculated);
+                                                              calculated, overflowMethod);
                 if (resultCode != 0)
                     break;
             }
@@ -821,7 +846,7 @@ static int searchDatabase(unsigned char query[], int queryLength,
 extern int swimdSearchDatabase(unsigned char query[], int queryLength, 
                                unsigned char** db, int dbLength, int dbSeqLengths[],
                                int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                               int scores[], const int mode) {    
+                               int scores[], const int mode, const int overflowMethod) {    
 #if !defined(__SSE4_1__) && !defined(__AVX2__)
     return SWIMD_ERR_NO_SIMD_SUPPORT;
 #else
@@ -839,7 +864,7 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
              gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
     } else if (mode == SWIMD_MODE_SW) {
         return searchDatabaseSW(query, queryLength, db, dbLength, dbSeqLengths, 
-                                gapOpen, gapExt, scoreMatrix, alphabetLength, scores);
+                                gapOpen, gapExt, scoreMatrix, alphabetLength, scores, overflowMethod);
     }
     return SWIMD_ERR_INVALID_MODE;
 #endif

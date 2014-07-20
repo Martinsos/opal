@@ -41,7 +41,7 @@ int main(int argc, char * const argv[]) {
     fillRandomly(query, queryLength, alphabetLength);
     
     // Create random database
-    int dbLength = 500;
+    int dbLength = 200;
     unsigned char * db[dbLength];
     int dbSeqsLengths[dbLength];
     for (int i = 0; i < dbLength; i++) {
@@ -89,7 +89,8 @@ int main(int argc, char * const argv[]) {
         return 1;
     }
     resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths, 
-                                     gapOpen, gapExt, scoreMatrix, alphabetLength, scores, modeCode);
+                                     gapOpen, gapExt, scoreMatrix, alphabetLength, scores,
+                                     modeCode, SWIMD_OVERFLOW_SIMPLE);
     finish = clock();
     double time1 = ((double)(finish-start))/CLOCKS_PER_SEC;
     printf("Time: %lf\n", time1);
@@ -99,8 +100,8 @@ int main(int argc, char * const argv[]) {
         exit(0);
     }
     // Print result
-    printf("Result: ");
-    printInts(scores, dbLength);
+    //printf("Result: ");
+    //printInts(scores, dbLength);
     printf("Maximum: %d\n", maximum(scores, dbLength));
 
 
@@ -120,8 +121,8 @@ int main(int argc, char * const argv[]) {
     printf("Time: %lf\n", time2);
 
     // Print result
-    printf("Result: ");
-    printInts(scores2, dbLength);
+    //printf("Result: ");
+    //printInts(scores2, dbLength);
     printf("Maximum: %d\n", maximum(scores2, dbLength));
 
 

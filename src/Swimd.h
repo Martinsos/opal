@@ -23,6 +23,11 @@ extern "C" {
 #define SWIMD_MODE_HW 1
 #define SWIMD_MODE_OV 2
 #define SWIMD_MODE_SW 3
+
+// Overflow handling
+#define SWIMD_OVERFLOW_SIMPLE 0
+#define SWIMD_OVERFLOW_BUCKETS 1
+
     
  /**
  * Compares query sequence with each database sequence and returns similarity scores.
@@ -55,12 +60,22 @@ extern "C" {
  *                                             _DBSEQ_
  *                                             _QUERY_
  *                    SWIMD_MODE_SW: local alignment (Smith-Waterman)
+ * @param [in] overflowMethod Method that defines behavior regarding overflows.
+ *               SWIMD_OVERFLOW_SIMPLE: all sequences are first calculated using
+ *                 char precision, those that overflowed are then calculated using
+ *                 short precision, and those that overflowed again are calculated
+ *                 using integer precision.
+ *               SWIMD_OVERFLOW_BUCKETS: database is divided into buckets and each
+ *                 bucket is calculated independently. When overflow occurs,
+ *                 calculation is resumed with higher precision for all
+ *                 following sequences in that bucket.  
+ *                            
  * @return 0 if all okay, error code otherwise.
  */
 int swimdSearchDatabase(unsigned char query[], int queryLength, 
                         unsigned char** db, int dbLength, int dbSeqLengths[],
                         int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                        int scores[], const int mode);
+                        int scores[], const int mode, const int overflowMethod);
     
 #ifdef __cplusplus 
 }
