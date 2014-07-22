@@ -862,8 +862,9 @@ static int searchDatabase(unsigned char query[], int queryLength,
 }
 
 
-extern int swimdSearchDatabase(unsigned char query[], int queryLength, 
-                               unsigned char** db, int dbLength, int dbSeqLengths[],
+extern int swimdSearchDatabase(
+    unsigned char query[], int queryLength, 
+    unsigned char** db, int dbLength, int dbSeqLengths[],
                                int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
                                int scores[], const int mode, const int overflowMethod) {    
 #if !defined(__SSE4_1__) && !defined(__AVX2__)
@@ -887,5 +888,31 @@ extern int swimdSearchDatabase(unsigned char query[], int queryLength,
                                 scores, overflowMethod);
     }
     return SWIMD_ERR_INVALID_MODE;
+#endif
+}
+
+
+extern int swimdSearchDatabaseCharSW(
+    unsigned char query[], int queryLength, unsigned char** db, int dbLength,
+    int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
+    int alphabetLength, int scores[]) {
+#if !defined(__SSE4_1__) && !defined(__AVX2__)
+    return SWIMD_ERR_NO_SIMD_SUPPORT;
+#else
+    bool* calculated = new bool[dbLength];
+    for (int i = 0; i < dbLength; i++) {
+        calculated[i] = false;
+    }
+    int resultCode = searchDatabaseSW_< SimdSW<char> >(
+        query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
+        scoreMatrix, alphabetLength, scores, calculated,
+        SWIMD_OVERFLOW_SIMPLE);
+    for (int i = 0; i < dbLength; i++) {
+        if (!calculated[i]) {
+            scores[i] = -1;
+        }
+    }
+    delete[] calculated;
+    return resultCode;
 #endif
 }
