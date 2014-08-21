@@ -37,7 +37,8 @@ extern "C" {
      * letters in alphabet. For example, if alphabet is {A,C,T,G} and sequence is ACCTCAG
      * it will be represented as 0112103.
      * Opening of gap is penalized with gapOpen, while gap extension is penalized with
-     * gapExt. gapOpen, gapExt and scores from scoreMatrix must be in (INT_MIN/2, INT_MAX/2).
+     * gapExt. Therefore, gap of lenght n will have penalty of gapOpen + (n - 1) * gapExt.
+     * gapOpen, gapExt and scores from scoreMatrix must be in (INT_MIN/2, INT_MAX/2).
      * Detects overflow only for SW!
      * Although not crucial, sorting database sequences ascending by length can give
      * some extra speed.

@@ -40,12 +40,13 @@ int main(int argc, char * const argv[]) {
         fprintf(stderr, "\n");
         fprintf(stderr, "Usage: swimd_aligner [options...] <query.fasta> <db.fasta>\n");        
         fprintf(stderr, "Options:\n");
-        fprintf(stderr, "\t-g N  N is gap opening penalty. [default: 3]\n");
-        fprintf(stderr, "\t-e N  N is gap extension penalty. [default: 1]\n");
-        fprintf(stderr, "\t-m Blosum50  Score matrix to be used. [default: Blosum50]\n"); 
-        fprintf(stderr, "\t-f FILE  FILE contains score matrix and some additional data. Overrides -m.\n");
-        fprintf(stderr, "\t-s  If specified, there will be no score output (silent mode).\n");
-        fprintf(stderr, "\t-a SW|NW|HW|OV  Alignment mode that will be used. [default: SW]\n");
+        fprintf(stderr, "  -g N  N is gap opening penalty. [default: 3]\n");
+        fprintf(stderr, "  -e N  N is gap extension penalty. [default: 1]\n"
+                        "    Gap of length n will have penalty of g + (n - 1) * e.\n");
+        fprintf(stderr, "  -m Blosum50  Score matrix to be used. [default: Blosum50]\n"); 
+        fprintf(stderr, "  -f FILE  FILE contains score matrix and some additional data. Overrides -m.\n");
+        fprintf(stderr, "  -s  If specified, there will be no score output (silent mode).\n");
+        fprintf(stderr, "  -a SW|NW|HW|OV  Alignment mode that will be used. [default: SW]\n");
         return 1;
     }
     //-------------------------------------------------------------------------//
