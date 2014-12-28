@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <limits>
+#include <vector>
 
 extern "C" {
 #include <immintrin.h> // AVX2 and lower
@@ -17,26 +18,30 @@ typedef __m256i __mxxxi; //!< represents register containing integers
 #define _mmxxx_load_si  _mm256_load_si256
 #define _mmxxx_store_si _mm256_store_si256
 #define _mmxxx_and_si   _mm256_and_si256
+#define _mmxxx_testz_si _mm256_testz_si256
 
-#define _mmxxx_adds_epi8 _mm256_adds_epi8
-#define _mmxxx_subs_epi8 _mm256_subs_epi8
-#define _mmxxx_min_epu8  _mm256_min_epu8
-#define _mmxxx_min_epi8  _mm256_min_epi8
-#define _mmxxx_max_epu8  _mm256_max_epu8
-#define _mmxxx_max_epi8  _mm256_max_epi8
-#define _mmxxx_set1_epi8 _mm256_set1_epi8
+#define _mmxxx_adds_epi8  _mm256_adds_epi8
+#define _mmxxx_subs_epi8  _mm256_subs_epi8
+#define _mmxxx_min_epu8   _mm256_min_epu8
+#define _mmxxx_min_epi8   _mm256_min_epi8
+#define _mmxxx_max_epu8   _mm256_max_epu8
+#define _mmxxx_max_epi8   _mm256_max_epi8
+#define _mmxxx_set1_epi8  _mm256_set1_epi8
+#define _mmxxx_cmpgt_epi8 _mm256_cmpgt_epi8
 
-#define _mmxxx_adds_epi16 _mm256_adds_epi16
-#define _mmxxx_subs_epi16 _mm256_subs_epi16
-#define _mmxxx_min_epi16  _mm256_min_epi16
-#define _mmxxx_max_epi16  _mm256_max_epi16
-#define _mmxxx_set1_epi16 _mm256_set1_epi16
+#define _mmxxx_adds_epi16  _mm256_adds_epi16
+#define _mmxxx_subs_epi16  _mm256_subs_epi16
+#define _mmxxx_min_epi16   _mm256_min_epi16
+#define _mmxxx_max_epi16   _mm256_max_epi16
+#define _mmxxx_set1_epi16  _mm256_set1_epi16
+#define _mmxxx_cmpgt_epi16 _mm256_cmpgt_epi16
 
-#define _mmxxx_add_epi32 _mm256_add_epi32
-#define _mmxxx_sub_epi32 _mm256_sub_epi32
-#define _mmxxx_min_epi32  _mm256_min_epi32
-#define _mmxxx_max_epi32  _mm256_max_epi32
-#define _mmxxx_set1_epi32 _mm256_set1_epi32
+#define _mmxxx_add_epi32   _mm256_add_epi32
+#define _mmxxx_sub_epi32   _mm256_sub_epi32
+#define _mmxxx_min_epi32   _mm256_min_epi32
+#define _mmxxx_max_epi32   _mm256_max_epi32
+#define _mmxxx_set1_epi32  _mm256_set1_epi32
+#define _mmxxx_cmpgt_epi32 _mm256_cmpgt_epi32
 
 #else // SSE4.1
 
@@ -45,35 +50,44 @@ typedef __m128i __mxxxi;
 #define _mmxxx_load_si  _mm_load_si128
 #define _mmxxx_store_si _mm_store_si128
 #define _mmxxx_and_si   _mm_and_si128
+#define _mmxxx_testz_si _mm_testz_si128
 
-#define _mmxxx_adds_epi8 _mm_adds_epi8
-#define _mmxxx_subs_epi8 _mm_subs_epi8
-#define _mmxxx_min_epu8  _mm_min_epu8
-#define _mmxxx_min_epi8  _mm_min_epi8
-#define _mmxxx_max_epu8  _mm_max_epu8
-#define _mmxxx_max_epi8  _mm_max_epi8
-#define _mmxxx_set1_epi8 _mm_set1_epi8
+#define _mmxxx_adds_epi8  _mm_adds_epi8
+#define _mmxxx_subs_epi8  _mm_subs_epi8
+#define _mmxxx_min_epu8   _mm_min_epu8
+#define _mmxxx_min_epi8   _mm_min_epi8
+#define _mmxxx_max_epu8   _mm_max_epu8
+#define _mmxxx_max_epi8   _mm_max_epi8
+#define _mmxxx_set1_epi8  _mm_set1_epi8
+#define _mmxxx_cmpgt_epi8 _mm_cmpgt_epi8
 
-#define _mmxxx_adds_epi16 _mm_adds_epi16
-#define _mmxxx_subs_epi16 _mm_subs_epi16
-#define _mmxxx_min_epi16  _mm_min_epi16
-#define _mmxxx_max_epi16  _mm_max_epi16
-#define _mmxxx_set1_epi16 _mm_set1_epi16
+#define _mmxxx_adds_epi16  _mm_adds_epi16
+#define _mmxxx_subs_epi16  _mm_subs_epi16
+#define _mmxxx_min_epi16   _mm_min_epi16
+#define _mmxxx_max_epi16   _mm_max_epi16
+#define _mmxxx_set1_epi16  _mm_set1_epi16
+#define _mmxxx_cmpgt_epi16 _mm_cmpgt_epi16
 
-#define _mmxxx_add_epi32 _mm_add_epi32
-#define _mmxxx_sub_epi32 _mm_sub_epi32
-#define _mmxxx_min_epi32  _mm_min_epi32
-#define _mmxxx_max_epi32  _mm_max_epi32
-#define _mmxxx_set1_epi32 _mm_set1_epi32
+#define _mmxxx_add_epi32   _mm_add_epi32
+#define _mmxxx_sub_epi32   _mm_sub_epi32
+#define _mmxxx_min_epi32   _mm_min_epi32
+#define _mmxxx_max_epi32   _mm_max_epi32
+#define _mmxxx_set1_epi32  _mm_set1_epi32
+#define _mmxxx_cmpgt_epi32 _mm_cmpgt_epi32
 
 #endif
 
 
 //------------------------------------ SIMD PARAMETERS ---------------------------------//
+static inline int simdIsAllZeroes(const __mxxxi& a) {
+    return _mmxxx_testz_si(a, a);
+}
+
 /**
  * Contains parameters and SIMD instructions specific for certain score type.
  */
-template<typename T> class SimdSW {};
+
+template<typename T> struct SimdSW {};
 
 template<>
 struct SimdSW<char> {
@@ -85,6 +99,7 @@ struct SimdSW<char> {
     static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_subs_epi8(a, b); }
     static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epu8(a, b); }
     static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epu8(a, b); }
+    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_cmpgt_epi8(a, b); }
     static inline __mxxxi set1(int a) { return _mmxxx_set1_epi8(a); }
 };
 
@@ -98,6 +113,7 @@ struct SimdSW<short> {
     static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_subs_epi16(a, b); }
     static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi16(a, b); }
     static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi16(a, b); }
+    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_cmpgt_epi16(a, b); }
     static inline __mxxxi set1(int a) { return _mmxxx_set1_epi16(a); }
 };
 
@@ -111,12 +127,13 @@ struct SimdSW<int> {
     static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_sub_epi32(a, b); }
     static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi32(a, b); }
     static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi32(a, b); }
+    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_cmpgt_epi32(a, b); }
     static inline __mxxxi set1(int a) { return _mmxxx_set1_epi32(a); }
 };
 //--------------------------------------------------------------------------------------//
 
 
-static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char * &currDbSeqPos, 
+static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char * &currDbSeqPos,
                              int &currDbSeqLength, unsigned char ** db, int dbSeqLengths[], bool calculated[],
                              int &numEndedDbSeqs);
 
@@ -133,13 +150,13 @@ void print_mmxxxi(__mxxxi mm) {
 /**
  * @param stopOnOverflow  If true, function will stop when first overflow happens.
  *            If false, function will not stop but continue with next sequence.
- *                        
+ *
  */
 template<class SIMD>
-static int searchDatabaseSW_(unsigned char query[], int queryLength, 
+static int searchDatabaseSW_(unsigned char query[], int queryLength,
                              unsigned char** db, int dbLength, int dbSeqLengths[],
                              int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                             int scores[], bool calculated[], const int overflowMethod) {
+                             SwimdSearchResult results[], bool calculated[], const int overflowMethod) {
 
     const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -183,9 +200,12 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     int nextDbSeqIdx = 0; // index in db
     int currDbSeqsIdxs[SIMD::numSeqs]; // index in db
     unsigned char* currDbSeqsPos[SIMD::numSeqs]; // current element for each current database sequence
-    int currDbSeqsLengths[SIMD::numSeqs];
+    int currDbSeqsLengths[SIMD::numSeqs];  // lengths of remaining parts of sequences
     int shortestDbSeqLength = -1;  // length of shortest sequence among current database sequences
     int numEndedDbSeqs = 0; // Number of sequences that ended
+
+    int currDbSeqsBestScoreRow[SIMD::numSeqs];  // Row index of best score for each current database sequence.
+    int currDbSeqsBestScoreColumn[SIMD::numSeqs];
 
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++)
@@ -229,12 +249,15 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             P[letter] = _mmxxx_load_si((__mxxxi const*)profileRow);
         }
         // ---------------------------------------------------------------------- //
-        
+
         // Previous cells: u - up, l - left, ul - up left
-        __mxxxi uF, uH, ulH; 
+        __mxxxi uF, uH, ulH;
         uF = uH = ulH = scoreZeroes; // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
 
         __mxxxi ofTest = scoreZeroes; // Used for detecting the overflow when not using saturated ar
+
+        int rowsWithImprovement[queryLength];
+        int rowsWithImprovementLength = 0;
 
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
@@ -257,6 +280,12 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 ofTest = _mmxxx_and_si(ofTest, ulH_P);
             if (!SIMD::satArthm)
                 ofTest = SIMD::min(ofTest, ulH_P);
+
+            // We remember rows that had max scores, in order to find out the row of best score.
+            rowsWithImprovement[rowsWithImprovementLength] = r;
+            // TODO(martin): simdIsAllZeroes seems to bring significant slowdown, but I could
+            // not find way to avoid it.
+            rowsWithImprovementLength += 1 - simdIsAllZeroes(SIMD::cmpgt(H, maxH));
 
             maxH = SIMD::max(maxH, H); // update best score
 
@@ -283,7 +312,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         bool overflowDetected = false;  // True if overflow was detected for this column.
         bool overflowed[SIMD::numSeqs];
         if (!SIMD::satArthm) {
-            // This check is based on following assumptions: 
+            // This check is based on following assumptions:
             //  - overflow wraps
             //  - Q, R and all scores from scoreMatrix are between LOWER_BOUND/2 and UPPER_BOUND/2 exclusive
             typename SIMD::type unpackedOfTest[SIMD::numSeqs];
@@ -316,8 +345,22 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         if (overflowMethod == SWIMD_OVERFLOW_BUCKETS && overflowDetected) {
             return SWIMD_ERR_OVERFLOW;
         }
-        
         // ---------------------------------------------------------------------- //
+
+        // --------- Update end location of alignment ----------- //
+        for (int i = 0; i < rowsWithImprovementLength; i++) {
+            int r = rowsWithImprovement[i];
+            typename SIMD::type unpackedH[SIMD::numSeqs];
+            _mmxxx_store_si((__mxxxi*)unpackedH, prevHs[r]);
+            for (int j = 0; j < SIMD::numSeqs; j++) {
+                if (unpackedH[j] == unpackedMaxH[j]) {
+                    currDbSeqsBestScoreRow[j] = r;
+                    currDbSeqsBestScoreColumn[j] = dbSeqLengths[currDbSeqsIdxs[j]] - currDbSeqsLengths[j]
+                        + columnsSinceLastSeqEnd - 1;
+                }
+            }
+        }
+        // ------------------------------------------------------ //
 
         // --------------------- CHECK AND HANDLE SEQUENCE END ------------------ //
         if (overflowDetected || shortestDbSeqLength == columnsSinceLastSeqEnd) { // If at least one sequence ended
@@ -331,10 +374,12 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                         numEndedDbSeqs++;
                         if (!overflowed[i]) {
                             // Save score and mark as calculated
-                            scores[currDbSeqsIdxs[i]] = unpackedMaxH[i];
-                            if (SIMD::negRange)
-                                scores[currDbSeqsIdxs[i]] -= LOWER_BOUND;
                             calculated[currDbSeqsIdxs[i]] = true;
+                            results[currDbSeqsIdxs[i]].score = unpackedMaxH[i];
+                            if (SIMD::negRange)
+                                results[currDbSeqsIdxs[i]].score -= LOWER_BOUND;
+                            results[currDbSeqsIdxs[i]].endLocationQuery = currDbSeqsBestScoreRow[i];
+                            results[currDbSeqsIdxs[i]].endLocationTarget = currDbSeqsBestScoreColumn[i];
                         }
                         // Load next sequence
                         loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
@@ -348,7 +393,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                             resetMask[i] = 0; // Does not change anything when used with saturated add
                         else
                             resetMask[i] = -1; // All 1s, does not change anything when used with and
-                            
+
                         if (currDbSeqsPos[i] != 0)
                             currDbSeqsPos[i]++; // If not new and not null, move for one element
                     }
@@ -388,7 +433,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     return 0;
 }
 
-static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char* &currDbSeqPos, 
+static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char* &currDbSeqPos,
                                     int &currDbSeqLength, unsigned char** db, int dbSeqLengths[], bool calculated[],
                                     int &numEndedDbSeqs) {
     while (nextDbSeqIdx < dbLength && calculated[nextDbSeqIdx]) {
@@ -408,10 +453,10 @@ static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDb
     }
 }
 
-static int searchDatabaseSW(unsigned char query[], int queryLength, 
+static int searchDatabaseSW(unsigned char query[], int queryLength,
                             unsigned char** db, int dbLength, int dbSeqLengths[],
                             int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                            int scores[], const int overflowMethod) {
+                            SwimdSearchResult results[], const int overflowMethod) {
     int resultCode = 0;
     // Do buckets only if using buckets overflow method.
     const int chunkSize = overflowMethod == SWIMD_OVERFLOW_BUCKETS ? 1024 : dbLength;
@@ -419,24 +464,25 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
     for (int startIdx = 0; startIdx < dbLength; startIdx += chunkSize) {
         unsigned char** db_ = db + startIdx;
         int* dbSeqLengths_ = dbSeqLengths + startIdx;
-        int* scores_ = scores + startIdx;
+        SwimdSearchResult* results_ = results + startIdx;
         int dbLength_ = startIdx + chunkSize >= dbLength ? dbLength - startIdx : chunkSize;
         for (int i = 0; i < dbLength_; i++)
             calculated[i] = false;
-        resultCode = searchDatabaseSW_< SimdSW<char> >(query, queryLength, 
-                                                       db_, dbLength_, dbSeqLengths_, 
-                                                       gapOpen, gapExt, scoreMatrix, alphabetLength, scores_,
-                                                       calculated, overflowMethod);
+        resultCode = searchDatabaseSW_< SimdSW<char> >(
+            query, queryLength, db_, dbLength_, dbSeqLengths_,
+            gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
+            calculated, overflowMethod);
         if (resultCode == SWIMD_ERR_OVERFLOW) {
-            resultCode = searchDatabaseSW_< SimdSW<short> >(query, queryLength,
-                                                            db_, dbLength_, dbSeqLengths_,
-                                                            gapOpen, gapExt, scoreMatrix, alphabetLength, scores_,
-                                                            calculated, overflowMethod);
+            resultCode = searchDatabaseSW_< SimdSW<short> >(
+                query, queryLength, db_, dbLength_, dbSeqLengths_,
+                gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
+                calculated, overflowMethod);
             if (resultCode == SWIMD_ERR_OVERFLOW) {
-                resultCode = searchDatabaseSW_< SimdSW<int> >(query, queryLength,
-                                                              db_, dbLength_, dbSeqLengths_,
-                                                              gapOpen, gapExt, scoreMatrix, alphabetLength, scores_,
-                                                              calculated, overflowMethod);
+                resultCode = searchDatabaseSW_< SimdSW<int> >(
+                    query, queryLength,
+                    db_, dbLength_, dbSeqLengths_,
+                    gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
+                    calculated, overflowMethod);
                 if (resultCode != 0)
                     break;
             }
@@ -470,6 +516,7 @@ struct Simd<char> {
     static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_subs_epi8(a, b); }
     static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi8(a, b); }
     static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi8(a, b); }
+    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_cmpgt_epi8(a, b); }
     static inline __mxxxi set1(int a) { return _mmxxx_set1_epi8(a); }
 };
 
@@ -482,6 +529,7 @@ struct Simd<short> {
     static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_subs_epi16(a, b); }
     static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi16(a, b); }
     static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi16(a, b); }
+    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_cmpgt_epi16(a, b); }
     static inline __mxxxi set1(int a) { return _mmxxx_set1_epi16(a); }
 };
 
@@ -494,6 +542,7 @@ struct Simd<int> {
     static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_sub_epi32(a, b); }
     static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi32(a, b); }
     static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi32(a, b); }
+    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_cmpgt_epi32(a, b); }
     static inline __mxxxi set1(int a) { return _mmxxx_set1_epi32(a); }
 };
 //--------------------------------------------------------------------------------------//
@@ -502,10 +551,10 @@ struct Simd<int> {
 
 
 template<class SIMD, int MODE>
-static int searchDatabase_(unsigned char query[], int queryLength, 
+static int searchDatabase_(unsigned char query[], int queryLength,
                            unsigned char** db, int dbLength, int dbSeqLengths[],
                            int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                           int scores[], bool calculated[], const int overflowMethod) {
+                           SwimdSearchResult results[], bool calculated[], const int overflowMethod) {
 
     static const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     static const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -546,7 +595,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
     const __mxxxi ZERO_SIMD = SIMD::set1(0);
     const __mxxxi LOWER_BOUND_SIMD = SIMD::set1(LOWER_BOUND);
     const __mxxxi LOWER_SCORE_BOUND_SIMD = SIMD::set1(LOWER_SCORE_BOUND);
-    
+
     int nextDbSeqIdx = 0; // index in db
     int currDbSeqsIdxs[SIMD::numSeqs]; // index in db
     unsigned char* currDbSeqsPos[SIMD::numSeqs]; // current element for each current database sequence
@@ -555,6 +604,9 @@ static int searchDatabase_(unsigned char query[], int queryLength,
     bool seqJustLoaded = false; // True if at least one sequence was just loaded into channel
     int shortestDbSeqLength = -1;  // length of shortest sequence among current database sequences
     int numEndedDbSeqs = 0; // Number of sequences that ended
+
+    // Row index of best score for each current database sequence. Used for HW and OV.
+    int currDbSeqsBestScoreColumn[SIMD::numSeqs];
 
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++)
@@ -583,7 +635,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
             else
                 prevHs[r] = SIMD::sub(prevHs[r-1], R);
         }
-        
+
         prevEs[r] = LOWER_SCORE_BOUND_SIMD;
     }
 
@@ -623,14 +675,14 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         if (MODE == SWIMD_MODE_NW) {
             if (seqJustLoaded) {
                 typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(16)));
-                for (int i = 0; i < SIMD::numSeqs; i++) 
+                for (int i = 0; i < SIMD::numSeqs; i++)
                     resetMask[i] = justLoaded[i] ?  0 : -1;
                 const __mxxxi resetMaskPacked = _mmxxx_load_si((__mxxxi const*)resetMask);
                 ulH = _mmxxx_and_si(uH, resetMaskPacked);
             } else {
                 ulH = uH;
             }
-            
+
             uH = SIMD::sub(uH, R); // uH is -Q - c*R
             // NOTE: Setup of ulH and uH for first column is done when sequence is loaded.
         } else {
@@ -648,7 +700,8 @@ static int searchDatabase_(unsigned char query[], int queryLength,
             firstRow_uH = uH;
             firstRow_ulH = ulH;
         }
-        
+
+        __mxxxi prevMaxLastRowH = maxLastRowH;
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
             // Calculate E = max(lH-Q, lE-R)
@@ -660,7 +713,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
 
             // Calculate H
             H = SIMD::max(F, E);
-            __mxxxi ulH_P = SIMD::add(ulH, P[query[r]]); 
+            __mxxxi ulH_P = SIMD::add(ulH, P[query[r]]);
             H = SIMD::max(H, ulH_P); // H could overflow
 
             maxH = SIMD::max(maxH, H); // update best score in column
@@ -688,7 +741,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
             minE = SIMD::min(minE, prevEs[r]);
 
         columnsSinceLastSeqEnd++;
-        
+
         typename SIMD::type unpackedMaxH[SIMD::numSeqs];
         _mmxxx_store_si((__mxxxi*)unpackedMaxH, maxH);
 
@@ -696,7 +749,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         bool overflowDetected = false;  // True if overflow was detected for this column.
         bool overflowed[SIMD::numSeqs];
         if (!SIMD::satArthm) {
-            /*           // This check is based on following assumptions: 
+            /*           // This check is based on following assumptions:
             //  - overflow wraps
             //  - Q, R and all scores from scoreMatrix are between LOWER_BOUND/2 and UPPER_BOUND/2 exclusive
             typename SIMD::type* unpackedOfTest = (typename SIMD::type *)&ofTest;
@@ -722,8 +775,23 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         }
         // ---------------------------------------------------------------------- //
 
+        // ------------------ Store end location of best score ------------------ //
+        if (MODE == SWIMD_MODE_HW || MODE == SWIMD_MODE_OV) {
+            // Determine the column of best score.
+            __mxxxi greater = SIMD::cmpgt(maxLastRowH, prevMaxLastRowH);
+            typename SIMD::type unpackedGreater[SIMD::numSeqs];
+            _mmxxx_store_si((__mxxxi*)unpackedGreater, greater);
+            for (int i = 0; i < SIMD::numSeqs; i++) {
+                if (unpackedGreater[i] != 0) {
+                    currDbSeqsBestScoreColumn[i] = dbSeqLengths[currDbSeqsIdxs[i]] - currDbSeqsLengths[i]
+                        + columnsSinceLastSeqEnd - 1;
+                }
+            }
+        }
+        // ---------------------------------------------------------------------- //
+
         seqJustLoaded = false;
-        // --------------------- CHECK AND HANDLE SEQUENCE END ------------------ //        
+        // --------------------- CHECK AND HANDLE SEQUENCE END ------------------ //
         if (overflowDetected || shortestDbSeqLength == columnsSinceLastSeqEnd) { // If at least one sequence ended
             shortestDbSeqLength = -1;
 
@@ -743,12 +811,48 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                     justLoaded[i] = false;
                     currDbSeqsLengths[i] -= columnsSinceLastSeqEnd;
 
-                    if (overflowed[i] | currDbSeqsLengths[i] == 0) { // If sequence ended
+                    if (overflowed[i] || currDbSeqsLengths[i] == 0) { // If sequence ended
                         numEndedDbSeqs++;
                         if (!overflowed[i]) {
-                            // Save best score
-                            scores[currDbSeqsIdxs[i]] = unpackedBestScore[i];
-                            calculated[currDbSeqsIdxs[i]] = true;
+                            // Store result.
+                            int dbSeqIdx = currDbSeqsIdxs[i];
+                            SwimdSearchResult *result = results + dbSeqIdx;
+                            calculated[dbSeqIdx] = true;
+                            // Set score.
+                            result->score = unpackedBestScore[i];
+                            // Set end location.
+                            if (MODE == SWIMD_MODE_NW) {
+                                result->endLocationQuery = queryLength - 1;
+                                result->endLocationTarget = dbSeqLengths[dbSeqIdx] - 1;
+                            }
+                            if (MODE == SWIMD_MODE_HW) {
+                                result->endLocationQuery = queryLength - 1;
+                                result->endLocationTarget = currDbSeqsBestScoreColumn[i];
+                            }
+                            if (MODE == SWIMD_MODE_OV) {
+                                // This unpacking will repeat unnecessarily if there are multiple sequences
+                                // ending at the same time, however that will happen in very rare occasions.
+                                // TODO(martin): always unpack only once.
+                                typename SIMD::type unpackedPrevMaxLastRowH[SIMD::numSeqs];
+                                _mmxxx_store_si((__mxxxi*)unpackedPrevMaxLastRowH, prevMaxLastRowH);
+                                typename SIMD::type maxScore = unpackedPrevMaxLastRowH[i];
+
+                                // If last column contains best score, determine row.
+                                if (unpackedMaxH[i] > maxScore) {
+                                    result->endLocationTarget = dbSeqLengths[dbSeqIdx] - 1;
+                                    for (int r = 0; r < queryLength; r++) {
+                                        typename SIMD::type unpackedPrevH[SIMD::numSeqs];
+                                        _mmxxx_store_si((__mxxxi*)unpackedPrevH, prevHs[r]);
+                                        if (unpackedPrevH[i] > maxScore) {
+                                            result->endLocationQuery = r;
+                                            maxScore = unpackedPrevH[i];
+                                        }
+                                    }
+                                } else {
+                                    result->endLocationTarget = currDbSeqsBestScoreColumn[i];
+                                    result->endLocationQuery = queryLength - 1;
+                                }
+                            }
                         }
                         // Load next sequence
                         if (loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
@@ -823,10 +927,10 @@ static int searchDatabase_(unsigned char query[], int queryLength,
 }
 
 template <int MODE>
-static int searchDatabase(unsigned char query[], int queryLength, 
+static int searchDatabase(unsigned char query[], int queryLength,
                           unsigned char** db, int dbLength, int dbSeqLengths[],
                           int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                          int scores[], const int overflowMethod) {
+                          SwimdSearchResult results[], const int overflowMethod) {
     int resultCode = 0;
     // Do buckets only if using buckets overflow method.
     const int chunkSize = overflowMethod == SWIMD_OVERFLOW_BUCKETS ? 1024 : dbLength;
@@ -834,23 +938,23 @@ static int searchDatabase(unsigned char query[], int queryLength,
     for (int startIdx = 0; startIdx < dbLength; startIdx += chunkSize) {
         unsigned char** db_ = db + startIdx;
         int* dbSeqLengths_ = dbSeqLengths + startIdx;
-        int* scores_ = scores + startIdx;
+        SwimdSearchResult *results_ = results + startIdx;
         int dbLength_ = startIdx + chunkSize >= dbLength ? dbLength - startIdx : chunkSize;
         for (int i = 0; i < dbLength_; i++)
             calculated[i] = false;
         resultCode = searchDatabase_< Simd<char>, MODE >
-            (query, queryLength, db_, dbLength_, dbSeqLengths_, 
-             gapOpen, gapExt, scoreMatrix, alphabetLength, scores_,
+            (query, queryLength, db_, dbLength_, dbSeqLengths_,
+             gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
              calculated, overflowMethod);
         if (resultCode == SWIMD_ERR_OVERFLOW) {
             resultCode = searchDatabase_< Simd<short>, MODE >
                 (query, queryLength, db_, dbLength_, dbSeqLengths_,
-                 gapOpen, gapExt, scoreMatrix, alphabetLength, scores_,
+                 gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
                  calculated, overflowMethod);
             if (resultCode == SWIMD_ERR_OVERFLOW) {
                 resultCode = searchDatabase_< Simd<int>, MODE >
                     (query, queryLength, db_, dbLength_, dbSeqLengths_,
-                     gapOpen, gapExt, scoreMatrix, alphabetLength, scores_,
+                     gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
                      calculated, overflowMethod);
                 if (resultCode != 0)
                     break; // TODO: this does not make much sense because of buckets, improve it.
@@ -863,29 +967,29 @@ static int searchDatabase(unsigned char query[], int queryLength,
 
 
 extern int swimdSearchDatabase(
-    unsigned char query[], int queryLength, 
+    unsigned char query[], int queryLength,
     unsigned char** db, int dbLength, int dbSeqLengths[],
-                               int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                               int scores[], const int mode, const int overflowMethod) {    
+    int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+    SwimdSearchResult results[], const int mode, const int overflowMethod) {
 #if !defined(__SSE4_1__) && !defined(__AVX2__)
     return SWIMD_ERR_NO_SIMD_SUPPORT;
 #else
     if (mode == SWIMD_MODE_NW) {
         return searchDatabase<SWIMD_MODE_NW>(
             query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
-            scoreMatrix, alphabetLength, scores, overflowMethod);
+            scoreMatrix, alphabetLength, results, overflowMethod);
     } else if (mode == SWIMD_MODE_HW) {
         return searchDatabase<SWIMD_MODE_HW>(
             query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
-            scoreMatrix, alphabetLength, scores, overflowMethod);
+            scoreMatrix, alphabetLength, results, overflowMethod);
     } else if (mode == SWIMD_MODE_OV) {
         return searchDatabase<SWIMD_MODE_OV>(
             query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
-            scoreMatrix, alphabetLength, scores, overflowMethod);
+            scoreMatrix, alphabetLength, results, overflowMethod);
     } else if (mode == SWIMD_MODE_SW) {
-        return searchDatabaseSW(query, queryLength, db, dbLength, dbSeqLengths, 
+        return searchDatabaseSW(query, queryLength, db, dbLength, dbSeqLengths,
                                 gapOpen, gapExt, scoreMatrix, alphabetLength,
-                                scores, overflowMethod);
+                                results, overflowMethod);
     }
     return SWIMD_ERR_INVALID_MODE;
 #endif
@@ -895,7 +999,7 @@ extern int swimdSearchDatabase(
 extern int swimdSearchDatabaseCharSW(
     unsigned char query[], int queryLength, unsigned char** db, int dbLength,
     int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
-    int alphabetLength, int scores[]) {
+    int alphabetLength, SwimdSearchResult results[]) {
 #if !defined(__SSE4_1__) && !defined(__AVX2__)
     return SWIMD_ERR_NO_SIMD_SUPPORT;
 #else
@@ -905,11 +1009,11 @@ extern int swimdSearchDatabaseCharSW(
     }
     int resultCode = searchDatabaseSW_< SimdSW<char> >(
         query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
-        scoreMatrix, alphabetLength, scores, calculated,
+        scoreMatrix, alphabetLength, results, calculated,
         SWIMD_OVERFLOW_SIMPLE);
     for (int i = 0; i < dbLength; i++) {
         if (!calculated[i]) {
-            scores[i] = -1;
+            results[i].score = -1;
         }
     }
     delete[] calculated;

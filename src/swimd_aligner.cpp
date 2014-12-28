@@ -18,7 +18,7 @@ int main(int argc, char * const argv[]) {
     int gapOpen = 3;
     int gapExt = 1;
     ScoreMatrix scoreMatrix;
-    
+
     //----------------------------- PARSE COMMAND LINE ------------------------//
     string scoreMatrixName = "Blosum50";
     bool scoreMatrixFileGiven = false;
@@ -38,12 +38,12 @@ int main(int argc, char * const argv[]) {
     }
     if (optind + 2 != argc) {
         fprintf(stderr, "\n");
-        fprintf(stderr, "Usage: swimd_aligner [options...] <query.fasta> <db.fasta>\n");        
+        fprintf(stderr, "Usage: swimd_aligner [options...] <query.fasta> <db.fasta>\n");
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "  -g N  N is gap opening penalty. [default: 3]\n");
         fprintf(stderr, "  -e N  N is gap extension penalty. [default: 1]\n"
                         "    Gap of length n will have penalty of g + (n - 1) * e.\n");
-        fprintf(stderr, "  -m Blosum50  Score matrix to be used. [default: Blosum50]\n"); 
+        fprintf(stderr, "  -m Blosum50  Score matrix to be used. [default: Blosum50]\n");
         fprintf(stderr, "  -f FILE  FILE contains score matrix and some additional data. Overrides -m.\n");
         fprintf(stderr, "  -s  If specified, there will be no score output (silent mode).\n");
         fprintf(stderr, "  -a SW|NW|HW|OV  Alignment mode that will be used. [default: SW]\n");
@@ -52,7 +52,7 @@ int main(int argc, char * const argv[]) {
     //-------------------------------------------------------------------------//
 
     // Set score matrix by name
-    if (scoreMatrixName == "Blosum50") 
+    if (scoreMatrixName == "Blosum50")
         scoreMatrix = ScoreMatrix::getBlosum50();
     else {
         fprintf(stderr, "Given score matrix name is not valid\n");
@@ -119,7 +119,7 @@ int main(int argc, char * const argv[]) {
         } else {
             printf("Chunk of database read!\n");
         }
-    
+
         int dbLength = dbSequences->size();
         unsigned char** db = new unsigned char*[dbLength];
         int* dbSeqLengths = new int[dbLength];
@@ -132,13 +132,13 @@ int main(int argc, char * const argv[]) {
         printf("Read %d database sequences, %d residues total.\n", dbLength, dbNumResidues);
 
         // ----------------------------- MAIN CALCULATION ----------------------------- //
-        int* scores = new int[dbLength];    
+        SwimdSearchResult* results = new SwimdSearchResult[dbLength];
         printf("\nComparing query to database...");
         fflush(stdout);
         clock_t start = clock();
         int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
                                              gapOpen, gapExt, scoreMatrix.getMatrix(), alphabetLength,
-                                             scores, modeCode, SWIMD_OVERFLOW_BUCKETS);
+                                             results, modeCode, SWIMD_OVERFLOW_BUCKETS);
         if (resultCode) {
             printf("\nDatabase search failed with error code: %d\n", resultCode);
         }
@@ -146,18 +146,18 @@ int main(int argc, char * const argv[]) {
         cpuTime += ((double)(finish-start))/CLOCKS_PER_SEC;
         // ---------------------------------------------------------------------------- //
         printf("\nFinished!\n");
-    
+
         if (!silent) {
             printf("\nScores (<database sequence number>: <score>): \n");
             for (int i = 0; i < dbLength; i++)
-                printf("#%d: %d\n", wholeDbLength + i, scores[i]);
+                printf("#%d: %d\n", wholeDbLength + i, results[i].score);
         }
 
         wholeDbLength += dbLength;
-        
+
         delete[] db;
         delete[] dbSeqLengths;
-        delete[] scores;
+        delete[] results;
         delete dbSequences;
     }
 
@@ -188,7 +188,7 @@ int main(int argc, char * const argv[]) {
     fclose(dbFile);
     // Free allocated space
     delete querySequences;
-    
+
     return 0;
 }
 

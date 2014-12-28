@@ -9,7 +9,7 @@
  *  - works for SSE4.1 and higher
  *************************************************************************************/
 
-#ifdef __cplusplus 
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -17,7 +17,7 @@ extern "C" {
 #define SWIMD_ERR_OVERFLOW 1 //!< Returned when score overflow happens. Happens only if score can't fit in int.
 #define SWIMD_ERR_NO_SIMD_SUPPORT 2 //!< Returned if available SIMD is not SSE4.1 or higher.
 #define SWIMD_ERR_INVALID_MODE 3 //!< Returned when given mode is invalid.
-    
+
 // Modes
 #define SWIMD_MODE_NW 0
 #define SWIMD_MODE_HW 1
@@ -28,12 +28,30 @@ extern "C" {
 #define SWIMD_OVERFLOW_SIMPLE 0
 #define SWIMD_OVERFLOW_BUCKETS 1
 
-    
+    /**
+     * Contains score and alignment information.
+     * If there are multiple possible alignments, one whose end
+     * has smallest position in target and then smallest position in row is used.
+     */
+    struct SwimdSearchResult {
+        int score;
+
+        //!< 0-indexed position in target where aligment ends.
+        int endLocationTarget;
+        //!< 0-indexed position in query where aligment ends.
+        int endLocationQuery;
+
+        //!< 0-indexed position in target where alignment starts.
+        int startLocationTarget;
+        //!< 0-indexed position in query where alignment starts.
+        int startLocationQuery;
+    };
+
     /**
      * Compares query sequence with each database sequence and returns similarity scores.
      * Uses one of following alignment algorithms in combination with afine gaps(GOTOH):
      *   SW, NW, HW, OV.
-     * Sequences are not represented as arrays of letters, but as arrays of indices of 
+     * Sequences are not represented as arrays of letters, but as arrays of indices of
      * letters in alphabet. For example, if alphabet is {A,C,T,G} and sequence is ACCTCAG
      * it will be represented as 0112103.
      * Opening of gap is penalized with gapOpen, while gap extension is penalized with
@@ -51,17 +69,17 @@ extern "C" {
      * @param [in] gapExt
      * @param [in] scoreMatrix Matrix of dimensions (alphabetLength, alphabetLength).
      * @param [in] alphabetLength
-     * @param [out] scores Score for every database sequence is stored here
-     *              (-1 if not calculated).
-     * @param [in] mode Mode of alignment, different mode means different algorithm. 
+     * @param [out] results Result for every database sequence is stored here
+     *              (score it set to -1 if not calculated).
+     * @param [in] mode Mode of alignment, different mode means different algorithm.
      *                    SWIMD_MODE_NW: global alignment (Needleman-Wunsch)
      *                    SWIMD_MODE_HW: semi-global. gap at query start and gap at query end
      *                                   are not penalized.
      *                                              DBSEQ
      *                                             _QUERY_
      *                    SWIMD_MODE_OV: semi-global. gap at query start, gap at query end,
-     *                                   gap at dbseq start and gap at dbseq end are not 
-     *                                   penalized. 
+     *                                   gap at dbseq start and gap at dbseq end are not
+     *                                   penalized.
      *                                             _DBSEQ_
      *                                             _QUERY_
      *                    SWIMD_MODE_SW: local alignment (Smith-Waterman)
@@ -73,15 +91,16 @@ extern "C" {
      *               SWIMD_OVERFLOW_BUCKETS: database is divided into buckets and each
      *                 bucket is calculated independently. When overflow occurs,
      *                 calculation is resumed with higher precision for all
-     *                 following sequences in that bucket.  
-     *                            
+     *                 following sequences in that bucket.
+     *
      * @return 0 if all okay, error code otherwise.
      */
     int swimdSearchDatabase(
         unsigned char query[], int queryLength, unsigned char** db, int dbLength,
         int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
-        int alphabetLength, int scores[], const int mode, const int overflowMethod);
-    
+        int alphabetLength, SwimdSearchResult results[],
+        const int mode, const int overflowMethod);
+
     /**
      * Same like swimdSearchDatabase, with few small differences:
      * - uses char for score representation
@@ -91,9 +110,9 @@ extern "C" {
     int swimdSearchDatabaseCharSW(
         unsigned char query[], int queryLength, unsigned char** db, int dbLength,
         int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
-        int alphabetLength, int scores[]);
+        int alphabetLength, SwimdSearchResult results[]);
 
-#ifdef __cplusplus 
+#ifdef __cplusplus
 }
 #endif
 
