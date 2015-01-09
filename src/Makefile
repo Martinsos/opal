@@ -17,8 +17,8 @@ swimd_aligner: Swimd.o ScoreMatrix.o swimd_aligner.cpp
 ScoreMatrix.o: ScoreMatrix.cpp ScoreMatrix.hpp
 	$(CXX) $(CXXFLAGS) -c ScoreMatrix.cpp
 
-test: Swimd.o test.cpp
-	$(CXX) $(CXXFLAGS) Swimd.o test.cpp -o test
+test: Swimd.o ScoreMatrix.o test.cpp
+	$(CXX) $(CXXFLAGS) Swimd.o ScoreMatrix.o test.cpp -o test
 
 Swimd.o: Swimd.cpp Swimd.h
 	$(CXX) $(CXXFLAGS) -c Swimd.cpp

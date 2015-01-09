@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <cassert>
+#include <climits>
 #include <cstdio>
 #include <limits>
 #include <vector>
@@ -156,7 +159,7 @@ template<class SIMD>
 static int searchDatabaseSW_(unsigned char query[], int queryLength,
                              unsigned char** db, int dbLength, int dbSeqLengths[],
                              int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                             SwimdSearchResult results[], bool calculated[], const int overflowMethod) {
+                             SwimdSearchResult results[], bool calculated[], int overflowMethod) {
 
     const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -204,21 +207,29 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     int shortestDbSeqLength = -1;  // length of shortest sequence among current database sequences
     int numEndedDbSeqs = 0; // Number of sequences that ended
 
-    int currDbSeqsBestScoreRow[SIMD::numSeqs];  // Row index of best score for each current database sequence.
+    // Needed in order to find the most early result, which is a nice condition to have.
+    int currDbSeqsBestScore[SIMD::numSeqs];
+    // Row index of best score for each current database sequence.
+    int currDbSeqsBestScoreRow[SIMD::numSeqs];
+    // Column index of best score for each current database sequence.
     int currDbSeqsBestScoreColumn[SIMD::numSeqs];
 
     // Load initial sequences
-    for (int i = 0; i < SIMD::numSeqs; i++)
+    for (int i = 0; i < SIMD::numSeqs; i++) {
+        currDbSeqsBestScore[i] = LOWER_BOUND;
         if (loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
                              currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs)) {
             // Update shortest sequence length if new sequence was loaded
             if (shortestDbSeqLength == -1 || currDbSeqsLengths[i] < shortestDbSeqLength)
                 shortestDbSeqLength = currDbSeqsLengths[i];
         }
+    }
 
     // Q is gap open penalty, R is gap ext penalty.
     __mxxxi Q = SIMD::set1(gapOpen);
     __mxxxi R = SIMD::set1(gapExt);
+
+    int rowsWithImprovement[queryLength];  // Indexes of rows where one of sequences improved score.
 
     // Previous H column (array), previous E column (array), previous F, all signed short
     __mxxxi prevHs[queryLength];
@@ -256,7 +267,6 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
         __mxxxi ofTest = scoreZeroes; // Used for detecting the overflow when not using saturated ar
 
-        int rowsWithImprovement[queryLength];
         int rowsWithImprovementLength = 0;
 
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
@@ -353,10 +363,13 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             typename SIMD::type unpackedH[SIMD::numSeqs];
             _mmxxx_store_si((__mxxxi*)unpackedH, prevHs[r]);
             for (int j = 0; j < SIMD::numSeqs; j++) {
-                if (unpackedH[j] == unpackedMaxH[j]) {
-                    currDbSeqsBestScoreRow[j] = r;
-                    currDbSeqsBestScoreColumn[j] = dbSeqLengths[currDbSeqsIdxs[j]] - currDbSeqsLengths[j]
-                        + columnsSinceLastSeqEnd - 1;
+                if (currDbSeqsPos[j] != 0 && !overflowed[j]) {  // If not null sequence or overflowed
+                    if (unpackedH[j] > currDbSeqsBestScore[j]) {
+                        currDbSeqsBestScore[j] = unpackedH[j];
+                        currDbSeqsBestScoreRow[j] = r;
+                        currDbSeqsBestScoreColumn[j] = dbSeqLengths[currDbSeqsIdxs[j]] - currDbSeqsLengths[j]
+                            + columnsSinceLastSeqEnd - 1;
+                    }
                 }
             }
         }
@@ -375,25 +388,23 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                         if (!overflowed[i]) {
                             // Save score and mark as calculated
                             calculated[currDbSeqsIdxs[i]] = true;
-                            results[currDbSeqsIdxs[i]].score = unpackedMaxH[i];
-                            if (SIMD::negRange)
+                            swimdSearchResultSetScore(results + currDbSeqsIdxs[i], currDbSeqsBestScore[i]);
+                            if (SIMD::negRange) {
                                 results[currDbSeqsIdxs[i]].score -= LOWER_BOUND;
+                            }
                             results[currDbSeqsIdxs[i]].endLocationQuery = currDbSeqsBestScoreRow[i];
                             results[currDbSeqsIdxs[i]].endLocationTarget = currDbSeqsBestScoreColumn[i];
                         }
+                        currDbSeqsBestScore[i] = LOWER_BOUND;
                         // Load next sequence
                         loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
                                          currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs);
-                        if (SIMD::negRange)
-                            resetMask[i] = LOWER_BOUND; //Sets to LOWER_BOUND when used with saturated add and value < 0
-                        else
-                            resetMask[i] = 0; // Sets to zero when used with and
+                        // If negative range, sets to LOWER_BOUND when used with saturated add and value < 0,
+                        // otherwise sets to zero when used with and.
+                        resetMask[i] = SIMD::negRange ? LOWER_BOUND : 0;
                     } else {
-                        if (SIMD::negRange)
-                            resetMask[i] = 0; // Does not change anything when used with saturated add
-                        else
-                            resetMask[i] = -1; // All 1s, does not change anything when used with and
-
+                        // Does not change anything when used with saturated add / and.
+                        resetMask[i] = SIMD::negRange ? 0 : -1;
                         if (currDbSeqsPos[i] != 0)
                             currDbSeqsPos[i]++; // If not new and not null, move for one element
                     }
@@ -453,10 +464,14 @@ static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDb
     }
 }
 
+/**
+ * @param If skip[i] is true, result for sequence #i will not be calculated.
+ *     If skip is NULL, all results will be calculated.
+ */
 static int searchDatabaseSW(unsigned char query[], int queryLength,
                             unsigned char** db, int dbLength, int dbSeqLengths[],
                             int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                            SwimdSearchResult results[], const int overflowMethod) {
+                            SwimdSearchResult results[], bool skip[], int overflowMethod) {
     int resultCode = 0;
     // Do buckets only if using buckets overflow method.
     const int chunkSize = overflowMethod == SWIMD_OVERFLOW_BUCKETS ? 1024 : dbLength;
@@ -466,8 +481,9 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
         int* dbSeqLengths_ = dbSeqLengths + startIdx;
         SwimdSearchResult* results_ = results + startIdx;
         int dbLength_ = startIdx + chunkSize >= dbLength ? dbLength - startIdx : chunkSize;
-        for (int i = 0; i < dbLength_; i++)
-            calculated[i] = false;
+        for (int i = 0; i < dbLength_; i++) {
+            calculated[i] = skip ? skip[i] : false;
+        }
         resultCode = searchDatabaseSW_< SimdSW<char> >(
             query, queryLength, db_, dbLength_, dbSeqLengths_,
             gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
@@ -554,7 +570,7 @@ template<class SIMD, int MODE>
 static int searchDatabase_(unsigned char query[], int queryLength,
                            unsigned char** db, int dbLength, int dbSeqLengths[],
                            int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                           SwimdSearchResult results[], bool calculated[], const int overflowMethod) {
+                           SwimdSearchResult results[], bool calculated[], int overflowMethod) {
 
     static const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     static const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -782,9 +798,11 @@ static int searchDatabase_(unsigned char query[], int queryLength,
             typename SIMD::type unpackedGreater[SIMD::numSeqs];
             _mmxxx_store_si((__mxxxi*)unpackedGreater, greater);
             for (int i = 0; i < SIMD::numSeqs; i++) {
-                if (unpackedGreater[i] != 0) {
-                    currDbSeqsBestScoreColumn[i] = dbSeqLengths[currDbSeqsIdxs[i]] - currDbSeqsLengths[i]
-                        + columnsSinceLastSeqEnd - 1;
+                if (currDbSeqsPos[i] != 0 && !overflowed[i]) {  // If not null sequence or overflowed
+                    if (unpackedGreater[i] != 0) {
+                        currDbSeqsBestScoreColumn[i] = dbSeqLengths[currDbSeqsIdxs[i]] - currDbSeqsLengths[i]
+                            + columnsSinceLastSeqEnd - 1;
+                    }
                 }
             }
         }
@@ -819,7 +837,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                             SwimdSearchResult *result = results + dbSeqIdx;
                             calculated[dbSeqIdx] = true;
                             // Set score.
-                            result->score = unpackedBestScore[i];
+                            swimdSearchResultSetScore(result, unpackedBestScore[i]);
                             // Set end location.
                             if (MODE == SWIMD_MODE_NW) {
                                 result->endLocationQuery = queryLength - 1;
@@ -926,11 +944,15 @@ static int searchDatabase_(unsigned char query[], int queryLength,
     return 0;
 }
 
+/**
+ * @param [in] skip  If skip[i] is true, result for sequence #i will not be calculated.
+ *     If skip is NULL, all results will be calculated.
+ */
 template <int MODE>
 static int searchDatabase(unsigned char query[], int queryLength,
                           unsigned char** db, int dbLength, int dbSeqLengths[],
                           int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                          SwimdSearchResult results[], const int overflowMethod) {
+                          SwimdSearchResult results[], bool skip[], int overflowMethod) {
     int resultCode = 0;
     // Do buckets only if using buckets overflow method.
     const int chunkSize = overflowMethod == SWIMD_OVERFLOW_BUCKETS ? 1024 : dbLength;
@@ -940,8 +962,9 @@ static int searchDatabase(unsigned char query[], int queryLength,
         int* dbSeqLengths_ = dbSeqLengths + startIdx;
         SwimdSearchResult *results_ = results + startIdx;
         int dbLength_ = startIdx + chunkSize >= dbLength ? dbLength - startIdx : chunkSize;
-        for (int i = 0; i < dbLength_; i++)
-            calculated[i] = false;
+        for (int i = 0; i < dbLength_; i++) {
+            calculated[i] = skip ? skip[i] : false;
+        }
         resultCode = searchDatabase_< Simd<char>, MODE >
             (query, queryLength, db_, dbLength_, dbSeqLengths_,
              gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
@@ -966,32 +989,311 @@ static int searchDatabase(unsigned char query[], int queryLength,
 }
 
 
+/**
+ * Returns new sequence that is reverse of given sequence.
+ */
+static inline unsigned char* createReverseCopy(const unsigned char* seq, int length) {
+    unsigned char* rSeq = (unsigned char*) malloc(length * sizeof(unsigned char));
+    for (int i = 0; i < length; i++) {
+        rSeq[i] = seq[length - i - 1];
+    }
+    return rSeq;
+}
+
+template <class T>
+static inline void revertArray(T array[], int length) {
+    for (int i = 0; i < length / 2; i++) {
+        T tmp = array[i];
+        array[i] = array[length - 1 - i];
+        array[length - 1 - i] = tmp;
+    }
+}
+
+// Here I store scores for one cell in score matrix.
+class Cell {
+public:
+    int H, E, F;
+    enum class Field {
+        H, E, F
+    };
+};
+
+/**
+ * Finds alignment of two sequences, if we know scoreLimit.
+ * First alignment that has score greater or equal then scoreLimit will be returned.
+ * If there is no such alignment, behavior will be unexpected.
+ * Always starts from top left corner (like NW does) no matter which mode is specified,
+ * and stops with regard to stop conditions of specified mode.
+ * For example, for HW it will stop on last row, and for SW it will stop anywhere.
+ * Returns score, start location (which is always (0, 0)), end location and alignment.
+ * @param [in] query
+ * @param [in] queryLength
+ * @param [in] target
+ * @param [in] targetLength
+ * @param [in] gapOpen
+ * @param [in] gapExt
+ * @param [in] scoreMatrix
+ * @param [in] alphabetLength
+ * @param [in] scoreLimit  First alignment with score greater/equal than scoreLimit is returned.
+ *     If there is no such score, behavior is undefined.
+ *     TODO(martin): make this function also work when max score is smaller then scoreLimit.
+ * @param [out] result  Pointer to already allocated object is expected here.
+ *     Score, start location, end location and alignment will be set.
+ *     Do not forget to free() alignment!
+ * @param [in] mode  Mode whose stop conditions will be used when finding alignment.
+ */
+static void findAlignment(
+    const unsigned char query[], const int queryLength, const unsigned char target[], const int targetLength,
+    const int gapOpen, const int gapExt, const int* scoreMatrix, const int alphabetLength,
+    const int scoreLimit, SwimdSearchResult* result, const int mode) {
+    /*
+    printf("Query: ");
+    for (int i = 0; i < queryLength; i++) {
+        printf("%d ", query[i]);
+    }
+    printf("\n");
+    printf("Target: ");
+    for (int i = 0; i < targetLength; i++) {
+        printf("%d ", target[i]);
+    }
+    printf("\n");
+    */
+    Cell** matrix = new Cell*[targetLength];  // NOTE: First index is column, second is row.
+    Cell* initialColumn = new Cell[queryLength];
+    const int LOWER_SCORE_BOUND = INT_MIN + gapExt;
+    for (int r = 0; r < queryLength; r++) {
+        initialColumn[r].H = -1 * gapOpen - r * gapExt;
+        initialColumn[r].E = LOWER_SCORE_BOUND;
+    }
+
+    Cell* prevColumn = initialColumn;
+    int maxScore = INT_MIN;  // Max score so far, but only among cells that could be final.
+    int H = INT_MIN;  // Current score.
+    int c;
+    for (c = 0; c < targetLength && maxScore < scoreLimit; c++) {
+        matrix[c] = new Cell[queryLength];
+
+        int uF = LOWER_SCORE_BOUND;
+        int uH = -1 * gapOpen - c * gapExt;
+        int ulH = c == 0 ? 0 : uH + gapExt;
+
+        //printf("\n");
+        for (int r = 0; r < queryLength; r++) {
+            int E = std::max(prevColumn[r].H - gapOpen, prevColumn[r].E - gapExt);
+            int F = std::max(uH - gapOpen, uF - gapExt);
+            int score = scoreMatrix[query[r] * alphabetLength + target[c]];
+            H = std::max(E, std::max(F, ulH + score));
+            /*
+            printf("E: %d ", E);
+            printf("F: %d ", F);
+            printf("score: %d ", score);
+            printf("ulH: %d ", ulH);
+            printf("H: %d ", H);
+            */
+
+            // If mode is SW, track max score of all cells.
+            // If mode is OV, track max score in last column.
+            if (mode == SWIMD_MODE_SW
+                || (mode == SWIMD_MODE_OV && c == targetLength - 1)) {
+                maxScore = std::max(maxScore, H);
+            }
+
+            uF = F;
+            uH = H;
+            ulH = prevColumn[r].H;
+
+            matrix[c][r].H = H;
+            matrix[c][r].E = E;
+            matrix[c][r].F = F;
+        }
+
+        if (mode == SWIMD_MODE_HW || mode == SWIMD_MODE_OV) {
+            maxScore = std::max(maxScore, H);  // Track max score in last row.
+        }
+        prevColumn = matrix[c];
+    }
+    int lastColumnIdx = c - 1;
+
+    result->startLocationTarget = 0;
+    result->startLocationQuery = 0;
+    result->scoreSet = 1;
+    // Determine score and end location of alignment.
+    switch (mode) {
+    case SWIMD_MODE_NW:
+        swimdSearchResultSetScore(result, H);
+        result->endLocationTarget = targetLength - 1;
+        result->endLocationQuery = queryLength - 1;
+        break;
+    case SWIMD_MODE_HW:
+        swimdSearchResultSetScore(result, maxScore);
+        result->endLocationTarget = lastColumnIdx;
+        result->endLocationQuery = queryLength - 1;
+        break;
+    case SWIMD_MODE_SW: case SWIMD_MODE_OV:
+        swimdSearchResultSetScore(result, maxScore);
+        result->endLocationTarget = lastColumnIdx;
+        int r;
+        for (r = 0; r < queryLength && matrix[lastColumnIdx][r].H != maxScore; r++);
+        assert(r < queryLength);
+        assert(matrix[lastColumnIdx][r].H == maxScore);
+        result->endLocationQuery = r;
+        break;
+    default:
+        assert(false);
+    }
+
+    // Construct alignment.
+    // I reserve max size possibly needed for alignment.
+    unsigned char* alignment = (unsigned char*) malloc(
+        sizeof(unsigned char) * (result->endLocationQuery + result->endLocationTarget));
+    int alignmentLength = 0;
+    int rIdx = result->endLocationQuery;
+    int cIdx = result->endLocationTarget;
+    Cell::Field field = Cell::Field::H;  // Current field type.
+    while (rIdx >= 0 && cIdx >= 0) {
+        Cell cell = matrix[cIdx][rIdx];  // Current cell.
+
+        // Determine to which cell and which field we should go next, move, and add operation to alignment.
+        switch (field) {
+        case Cell::Field::H:
+            if (cell.H == cell.E) {
+                field = Cell::Field::E;
+            } else if (cell.H == cell.F) {
+                field = Cell::Field::F;
+            } else {
+                alignment[alignmentLength++] = (query[rIdx] == target[cIdx] ? SWIMD_ALIGN_MATCH
+                                                : SWIMD_ALIGN_MISMATCH);
+                cIdx--; rIdx--;
+            }
+            break;
+        case Cell::Field::E:
+            field = (cell.E == matrix[cIdx - 1][rIdx].H - gapOpen) ? Cell::Field::H : Cell::Field::E;
+            alignment[alignmentLength++] = SWIMD_ALIGN_INS;
+            cIdx--;
+            break;
+        case Cell::Field::F:
+            field = (cell.F == matrix[cIdx][rIdx - 1].H - gapOpen) ? Cell::Field::H : Cell::Field::F;
+            alignment[alignmentLength++] = SWIMD_ALIGN_DEL;
+            rIdx--;
+            break;
+        }
+    }
+    // I stop when matrix border is reached, so I have to add indels at start of alignment
+    // manually (they do not have entry in operations). Only one of these two loops will trigger.
+    while (rIdx >= 0) {
+        alignment[alignmentLength] = SWIMD_ALIGN_DEL;
+        alignmentLength++; rIdx--;
+    }
+    while (cIdx >= 0) {
+        alignment[alignmentLength] = SWIMD_ALIGN_INS;
+        alignmentLength++; cIdx--;
+    }
+    //printf("rIdx: %d, cIdx: %d\n", rIdx, cIdx);
+    assert(rIdx == -1 && cIdx == -1);
+    alignment = (unsigned char*) realloc(alignment, sizeof(unsigned char) * alignmentLength);
+    revertArray(alignment, alignmentLength);
+    // Store alignment to result.
+    result->alignment = alignment;
+    result->alignmentLength = alignmentLength;
+
+    /*
+    printf("Alignment: ");
+    for (int j = 0; j < result->alignmentLength; j++)
+        printf("%d ", result->alignment[j]);
+    printf("\n");
+    */
+
+    // Cleanup
+    delete[] initialColumn;
+    for (int i = 0; i <= lastColumnIdx; i++) {
+        delete[] matrix[i];
+    }
+    delete[] matrix;
+}
+
+
 extern int swimdSearchDatabase(
     unsigned char query[], int queryLength,
     unsigned char** db, int dbLength, int dbSeqLengths[],
     int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-    SwimdSearchResult results[], const int mode, const int overflowMethod) {
+    SwimdSearchResult results[], int searchType, int mode, int overflowMethod) {
 #if !defined(__SSE4_1__) && !defined(__AVX2__)
     return SWIMD_ERR_NO_SIMD_SUPPORT;
 #else
-    if (mode == SWIMD_MODE_NW) {
-        return searchDatabase<SWIMD_MODE_NW>(
-            query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
-            scoreMatrix, alphabetLength, results, overflowMethod);
-    } else if (mode == SWIMD_MODE_HW) {
-        return searchDatabase<SWIMD_MODE_HW>(
-            query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
-            scoreMatrix, alphabetLength, results, overflowMethod);
-    } else if (mode == SWIMD_MODE_OV) {
-        return searchDatabase<SWIMD_MODE_OV>(
-            query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
-            scoreMatrix, alphabetLength, results, overflowMethod);
-    } else if (mode == SWIMD_MODE_SW) {
-        return searchDatabaseSW(query, queryLength, db, dbLength, dbSeqLengths,
-                                gapOpen, gapExt, scoreMatrix, alphabetLength,
-                                results, overflowMethod);
+    // Calculate score and end location.
+    int status;
+    // Skip recalculation of sequences that already have score and end location.
+    bool *skip = new bool[dbLength];
+    for (int i = 0; i < dbLength; i++) {
+        skip[i] = (!swimdSearchResultIsEmpty(results[i]) && results[i].endLocationQuery >= 0
+                   && results[i].endLocationTarget >= 0);
     }
-    return SWIMD_ERR_INVALID_MODE;
+    if (mode == SWIMD_MODE_NW) {
+        status = searchDatabase<SWIMD_MODE_NW>(
+            query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
+            scoreMatrix, alphabetLength, results, skip, overflowMethod);
+    } else if (mode == SWIMD_MODE_HW) {
+        status = searchDatabase<SWIMD_MODE_HW>(
+            query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
+            scoreMatrix, alphabetLength, results, skip, overflowMethod);
+    } else if (mode == SWIMD_MODE_OV) {
+        status = searchDatabase<SWIMD_MODE_OV>(
+            query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
+            scoreMatrix, alphabetLength, results, skip, overflowMethod);
+    } else if (mode == SWIMD_MODE_SW) {
+        status = searchDatabaseSW(
+            query, queryLength, db, dbLength, dbSeqLengths,
+            gapOpen, gapExt, scoreMatrix, alphabetLength,
+            results, skip, overflowMethod);
+    } else {
+        status = SWIMD_ERR_INVALID_MODE;
+    }
+    delete[] skip;
+    if (status) return status;
+
+    if (searchType == SWIMD_SEARCH_ALIGNMENT) {
+        // Calculate alignment of query with each database sequence.
+        unsigned char* const rQuery = createReverseCopy(query, queryLength);
+        for (int i = 0; i < dbLength; i++) {
+            if (mode == SWIMD_MODE_SW && results[i].score == 0) {  // If it does not have alignment
+                results[i].alignment = NULL;
+                results[i].alignmentLength = 0;
+                results[i].startLocationQuery = results[i].startLocationTarget = -1;
+                results[i].endLocationQuery = results[i].endLocationTarget = -1;
+            } else {
+                //printf("%d %d\n", results[i].endLocationQuery, results[i].endLocationTarget);
+                // Do alignment in reverse direction.
+                int alignQueryLength = results[i].endLocationQuery + 1;
+                unsigned char* alignQuery = rQuery + queryLength - alignQueryLength;
+                int alignTargetLength = results[i].endLocationTarget + 1;
+                unsigned char* alignTarget = createReverseCopy(db[i], alignTargetLength);
+                SwimdSearchResult result;
+                findAlignment(
+                    alignQuery, alignQueryLength, alignTarget, alignTargetLength,
+                    gapOpen, gapExt, scoreMatrix, alphabetLength,
+                    results[i].score, &result, mode);
+                //printf("%d %d\n", results[i].score, result.score);
+                assert(results[i].score == result.score);
+                // Translate results.
+                results[i].startLocationQuery = alignQueryLength - result.endLocationQuery - 1;
+                results[i].startLocationTarget = alignTargetLength - result.endLocationTarget - 1;
+                results[i].alignmentLength = result.alignmentLength;
+                results[i].alignment = result.alignment;
+                revertArray(results[i].alignment, results[i].alignmentLength);
+                free(alignTarget);
+            }
+        }
+        free(rQuery);
+    } else {
+        for (int i = 0; i < dbLength; i++) {
+            results[i].alignment = NULL;
+            results[i].alignmentLength = -1;
+            results[i].startLocationQuery = -1;
+            results[i].startLocationTarget = -1;
+        }
+    }
+
+    return 0;
 #endif
 }
 
@@ -1014,9 +1316,28 @@ extern int swimdSearchDatabaseCharSW(
     for (int i = 0; i < dbLength; i++) {
         if (!calculated[i]) {
             results[i].score = -1;
+            results[i].scoreSet = 0;
         }
     }
     delete[] calculated;
     return resultCode;
 #endif
+}
+
+
+extern void swimdInitSearchResult(SwimdSearchResult* result) {
+    result->scoreSet = 0;
+    result->startLocationTarget = result->startLocationQuery = -1;
+    result->endLocationTarget = result->endLocationQuery = -1;
+    result->alignment = NULL;
+    result->alignmentLength = 0;
+}
+
+extern int swimdSearchResultIsEmpty(const SwimdSearchResult result) {
+    return !result.scoreSet;
+}
+
+extern void swimdSearchResultSetScore(SwimdSearchResult* result, int score) {
+    result->scoreSet = 1;
+    result->score = score;
 }

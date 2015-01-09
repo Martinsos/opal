@@ -13,6 +13,9 @@
 using namespace std;
 
 bool readFastaSequences(FILE* &file, unsigned char* alphabet, int alphabetLength, vector< vector<unsigned char> >* seqs);
+void printAlignment(const unsigned char* query, const int queryLength,
+                    const unsigned char* target, const int targetLength,
+                    const SwimdSearchResult result, const unsigned char* alphabet);
 
 int main(int argc, char * const argv[]) {
     int gapOpen = 3;
@@ -25,8 +28,9 @@ int main(int argc, char * const argv[]) {
     char scoreMatrixFilepath[512];
     bool silent = false;
     char mode[16] = "SW";
+    int searchType = SWIMD_SEARCH_SCORE;
     int option;
-    while ((option = getopt(argc, argv, "a:o:e:m:f:s")) >= 0) {
+    while ((option = getopt(argc, argv, "a:o:e:m:f:sp")) >= 0) {
         switch (option) {
         case 'a': strcpy(mode, optarg); break;
         case 'o': gapOpen = atoi(optarg); break;
@@ -34,6 +38,7 @@ int main(int argc, char * const argv[]) {
         case 'm': scoreMatrixName = string(optarg); break;
         case 'f': scoreMatrixFileGiven = true; strcpy(scoreMatrixFilepath, optarg); break;
         case 's': silent = true; break;
+        case 'p': searchType = SWIMD_SEARCH_ALIGNMENT; break;
         }
     }
     if (optind + 2 != argc) {
@@ -45,8 +50,9 @@ int main(int argc, char * const argv[]) {
                         "    Gap of length n will have penalty of g + (n - 1) * e.\n");
         fprintf(stderr, "  -m Blosum50  Score matrix to be used. [default: Blosum50]\n");
         fprintf(stderr, "  -f FILE  FILE contains score matrix and some additional data. Overrides -m.\n");
-        fprintf(stderr, "  -s  If specified, there will be no score output (silent mode).\n");
+        fprintf(stderr, "  -s  If set, there will be no score output (silent mode).\n");
         fprintf(stderr, "  -a SW|NW|HW|OV  Alignment mode that will be used. [default: SW]\n");
+        fprintf(stderr, "  -p  If set, alignment is found and printed.\n");
         return 1;
     }
     //-------------------------------------------------------------------------//
@@ -133,12 +139,15 @@ int main(int argc, char * const argv[]) {
 
         // ----------------------------- MAIN CALCULATION ----------------------------- //
         SwimdSearchResult* results = new SwimdSearchResult[dbLength];
+        for (int i = 0; i < dbLength; i++) {
+            swimdInitSearchResult(results + i);
+        }
         printf("\nComparing query to database...");
         fflush(stdout);
         clock_t start = clock();
         int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
                                              gapOpen, gapExt, scoreMatrix.getMatrix(), alphabetLength,
-                                             results, modeCode, SWIMD_OVERFLOW_BUCKETS);
+                                             results, searchType, modeCode, SWIMD_OVERFLOW_BUCKETS);
         if (resultCode) {
             printf("\nDatabase search failed with error code: %d\n", resultCode);
         }
@@ -147,14 +156,37 @@ int main(int argc, char * const argv[]) {
         // ---------------------------------------------------------------------------- //
         printf("\nFinished!\n");
 
+        printf("search type: %d\n", searchType);
+
         if (!silent) {
-            printf("\nScores (<database sequence number>: <score>): \n");
-            for (int i = 0; i < dbLength; i++)
-                printf("#%d: %d\n", wholeDbLength + i, results[i].score);
+            printf("\n#<i>: <score> (<query start>, <target start>) (<query end>, <target end>)\n");
+            for (int i = 0; i < dbLength; i++) {
+                printf("#%d: %d", wholeDbLength + i, results[i].score);
+                if (results[i].startLocationQuery >= 0) {
+                    printf(" (%d, %d)", results[i].startLocationQuery, results[i].startLocationTarget);
+                } else {
+                    printf(" (?, ?)");
+                }
+                if (results[i].endLocationQuery >= 0) {
+                    printf(" (%d, %d)", results[i].endLocationQuery, results[i].endLocationTarget);
+                } else {
+                    printf(" (?, ?)");
+                }
+                printf("\n");
+
+                if (results[i].alignment) {
+                    printAlignment(query, queryLength, db[i], dbSeqLengths[i], results[i], alphabet);
+                }
+            }
         }
 
         wholeDbLength += dbLength;
 
+        for (int i = 0; i < dbLength; i++) {
+            if (results[i].alignment) {
+                free(results[i].alignment);
+            }
+        }
         delete[] db;
         delete[] dbSeqLengths;
         delete[] results;
@@ -257,5 +289,42 @@ bool readFastaSequences(FILE* &file, unsigned char* alphabet, int alphabetLength
 
     return true;
 }
- 
 
+
+void printAlignment(const unsigned char* query, const int queryLength,
+                    const unsigned char* target, const int targetLength,
+                    const SwimdSearchResult result, const unsigned char* alphabet) {
+    int tIdx = result.startLocationTarget;
+    int qIdx = result.startLocationQuery;
+    /* What is this for?
+      if (modeCode == EDLIB_MODE_HW) {
+        tIdx = position;
+        for (int i = 0; i < alignmentLength; i++) {
+            if (alignment[i] != SWIMD_ALIGN_DEL)
+                tIdx--;
+        }
+      }
+    */
+    for (int start = 0; start < result.alignmentLength; start += 50) {
+        // target
+        printf("T: ");
+        int startTIdx = tIdx;
+        for (int j = start; j < start + 50 && j < result.alignmentLength; j++) {
+            if (result.alignment[j] == SWIMD_ALIGN_DEL)
+                printf("_");
+            else
+                printf("%c", alphabet[target[tIdx++]]);
+        }
+        printf(" (%d - %d)\n", max(startTIdx, 0), tIdx - 1);
+        // query
+        printf("Q: ");
+        int startQIdx = qIdx;
+        for (int j = start; j < start + 50 && j < result.alignmentLength; j++) {
+            if (result.alignment[j] == SWIMD_ALIGN_INS)
+                printf("_");
+            else
+                printf("%c", alphabet[query[qIdx++]]);
+        }
+        printf(" (%d - %d)\n\n", max(startQIdx, 0), qIdx - 1);
+    }
+}

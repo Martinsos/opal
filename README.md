@@ -70,7 +70,8 @@ Type `./swimd_aligner` for help.
 
 Examples of usage:
 
-    ./swimd_aligner ../test_data/query/O74807.fasta ../test_data/db/uniprot_sprot12071.fasta
+    ./swimd_aligner ../test_data/query/O74807.fasta ../test_data/db/uniprot_sprot15.fasta
+    ./swimd_aligner -p ../test_data/query/O74807.fasta ../test_data/db/uniprot_sprot15.fasta
     ./swimd_aligner -s ../test_data/query/P18080.fasta ../test_data/db/uniprot_sprot12071.fasta
     ./swimd_aligner -s -a NW ../test_data/query/P18080.fasta ../test_data/db/uniprot_sprot12071.fasta
 

@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "Swimd.h"
+#include "ScoreMatrix.hpp"
 
 using namespace std;
 
@@ -20,6 +21,8 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
                     int alphabetLength, SwimdSearchResult results[], const int);
 void printInts(int a[], int aLength);
 int maximumScore(SwimdSearchResult results[], int resultsLength);
+bool checkAlignment(const unsigned char* query, int queryLength, const unsigned char* target, int targetLength,
+                    const SwimdSearchResult result, int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength);
 
 int main(int argc, char * const argv[]) {
 
@@ -51,23 +54,22 @@ int main(int argc, char * const argv[]) {
     }
 
     /*
-      printf("Query:\n");
-      for (int i = 0; i < queryLength; i++)
-      printf("%d ", query[i]);
-      printf("\n");
+    int queryLength = 3;
+    unsigned char query[] = {2, 0, 1};
 
-      printf("Database:\n");
-      for (int i = 0; i < dbLength; i++) {
-      printf("%d. ", i);
-      for (int j = 0; j < dbSeqsLengths[i]; j++)
-      printf("%d ", db[i][j]);
-      printf("\n");
-      }
+    unsigned char target[] = {3, 2, 3, 3, 1};
+    int dbLength = 1;
+    int dbSeqsLengths[] = {5};
+    unsigned char* db[1];
+    db[0] = target;
     */
 
     // Create score matrix
     int * scoreMatrix = createSimpleScoreMatrix(alphabetLength, 3, -1);
-
+    /*int* scoreMatrix = ScoreMatrix::getBlosum50().getMatrix();
+    int alphabetLength = ScoreMatrix::getBlosum50().getAlphabetLength();
+    int gapOpen = 3;
+    int gapExt = 1;*/
 
     // Run Swimd
     printf("Starting Swimd!\n");
@@ -78,6 +80,9 @@ int main(int argc, char * const argv[]) {
 #endif
     start = clock();
     SwimdSearchResult results[dbLength];
+    for (int i = 0; i < dbLength; i++) {
+        swimdInitSearchResult(results + i);
+    }
     int resultCode;
     int modeCode;
     if (!strcmp(mode, "NW")) modeCode = SWIMD_MODE_NW;
@@ -90,7 +95,7 @@ int main(int argc, char * const argv[]) {
     }
     resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths,
                                      gapOpen, gapExt, scoreMatrix, alphabetLength, results,
-                                     modeCode, SWIMD_OVERFLOW_SIMPLE);
+                                     SWIMD_SEARCH_ALIGNMENT, modeCode, SWIMD_OVERFLOW_SIMPLE);
     finish = clock();
     double time1 = ((double)(finish-start)) / CLOCKS_PER_SEC;
 
@@ -111,6 +116,9 @@ int main(int argc, char * const argv[]) {
     printf("Starting normal!\n");
     start = clock();
     SwimdSearchResult results2[dbLength];
+    for (int i = 0; i < dbLength; i++) {
+        swimdInitSearchResult(results2 + i);
+    }
     if (!strcmp(mode, "SW")) {
         resultCode = calculateSW(query, queryLength, db, dbLength, dbSeqsLengths,
                                  gapOpen, gapExt, scoreMatrix, alphabetLength, results2);
@@ -127,6 +135,20 @@ int main(int argc, char * const argv[]) {
 
     // Print differences in scores (hopefully there are none!)
     for (int i = 0; i < dbLength; i++) {
+        /*
+        printf("Query: ");
+        for (int j = 0; j < queryLength; j++)
+            printf("%d ", query[j]);
+        printf("\n");
+        printf("Target: ");
+        for (int j = 0; j < dbSeqsLengths[i]; j++)
+            printf("%d ", db[i][j]);
+            printf("\n");
+        printf("%d", results[i].score);
+        printf(" (%d, %d)", results[i].startLocationQuery, results[i].startLocationTarget);
+        printf(" (%d, %d)\n", results[i].endLocationQuery, results[i].endLocationTarget);
+        */
+
         if (results[i].score != results2[i].score) {
             printf("#%d: score is %d but should be %d\n", i, results[i].score, results2[i].score);
         }
@@ -140,12 +162,16 @@ int main(int argc, char * const argv[]) {
         }
         //printf("#%d: score -> %d, end location -> (q: %d, t: %d)\n",
         //       i, results[i].score, results[i].endLocationQuery, results[i].endLocationTarget);
+
+        checkAlignment(query, queryLength, db[i], dbSeqsLengths[i],
+                       results[i], gapOpen, gapExt, scoreMatrix, alphabetLength);
     }
 
     printf("Times faster: %lf\n", time2/time1);
 
     // Free allocated memory
     for (int i = 0; i < dbLength; i++) {
+        if (results[i].alignment) free(results[i].alignment);
         delete[] db[i];
     }
     delete[] scoreMatrix;
@@ -204,9 +230,16 @@ int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int
             }
         }
 
+        if (maxH == 0) {
+
+        }
         results[seqIdx].score = maxH;
-        results[seqIdx].endLocationTarget = endLocationTarget;
-        results[seqIdx].endLocationQuery = endLocationQuery;
+        if (maxH == 0) {
+            results[seqIdx].endLocationTarget = results[seqIdx].endLocationQuery = -1;
+        } else {
+            results[seqIdx].endLocationTarget = endLocationTarget;
+            results[seqIdx].endLocationQuery = endLocationQuery;
+        }
     }
 
     return 0;
@@ -301,4 +334,84 @@ int maximumScore(SwimdSearchResult results[], int resultsLength) {
         if (results[i].score > maximum)
             maximum = results[i].score;
     return maximum;
+}
+
+
+/**
+ * Checks if alignment is correct.
+ */
+bool checkAlignment(const unsigned char* query, int queryLength, const unsigned char* target, int targetLength,
+                    const SwimdSearchResult result, int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength) {
+    /*
+    printf("Query: ");
+    for (int i = 0; i < queryLength; i++) {
+        printf("%d ", query[i]);
+    }
+    printf("\n");
+    printf("Target: ");
+    for (int i = 0; i < targetLength; i++) {
+        printf("%d ", target[i]);
+    }
+    printf("\n");
+
+    printf("Alignment: ");
+    for (int j = 0; j < result.alignmentLength; j++)
+        printf("%d ", result.alignment[j]);
+    printf("\n");
+    printf("%d", result.score);
+    printf(" (%d, %d)", result.startLocationQuery, result.startLocationTarget);
+    printf(" (%d, %d)\n", result.endLocationQuery, result.endLocationTarget);
+    */
+
+    // I think about the problem of checking alignment not through matrix, but through two sequences
+    // whose elements I consume with each alignment operation.
+    int alignScore = 0;
+    // qIdx and tIdx point to elements that are to be consumed next.
+    int qIdx = result.startLocationQuery;
+    int tIdx = result.startLocationTarget;
+    int prevOperation = -1;
+    for (int i = 0; i < result.alignmentLength; i++) {
+        // If sequence with no more elements is going to be consumed, report error.
+        if ((result.alignment[i] != SWIMD_ALIGN_DEL && tIdx >= targetLength)
+            || (result.alignment[i] != SWIMD_ALIGN_INS && qIdx >= queryLength)) {
+            printf("Alignment went outside of matrix! (tIdx, qIdx, i): (%d, %d, %d)\n", tIdx, qIdx, i);
+            return false;
+        }
+
+        // Do a move -> consume elements from query and/or target, and update score.
+        switch (result.alignment[i]) {
+        case SWIMD_ALIGN_MATCH:
+            if (query[qIdx] != target[tIdx]) {
+                printf("Should be match but is a mismatch! (tIdx, qIdx, i): (%d, %d, %d)\n", tIdx, qIdx, i);
+                return false;
+            }
+            alignScore += scoreMatrix[query[qIdx] * alphabetLength + target[tIdx]];
+            qIdx++; tIdx++; break;
+        case SWIMD_ALIGN_MISMATCH:
+            if (query[qIdx] == target[tIdx]) {
+                printf("Should be mismatch but is a match! (tIdx, qIdx, i): (%d, %d, %d)\n", tIdx, qIdx, i);
+                return false;
+            }
+            alignScore += scoreMatrix[query[qIdx] * alphabetLength + target[tIdx]];
+            qIdx++; tIdx++; break;
+        case SWIMD_ALIGN_DEL:
+            alignScore -= (prevOperation == SWIMD_ALIGN_DEL ? gapExt : gapOpen);
+            qIdx++; break;
+        case SWIMD_ALIGN_INS:
+            alignScore -= (prevOperation == SWIMD_ALIGN_INS ? gapExt : gapOpen);
+            tIdx++; break;
+        }
+
+        prevOperation = result.alignment[i];
+    }
+    if (qIdx - 1 != result.endLocationQuery || tIdx - 1 != result.endLocationTarget) {
+        printf("Alignment ended at (%d, %d) instead of (%d, %d)!\n",
+               qIdx - 1, tIdx - 1, result.endLocationQuery, result.endLocationTarget);
+        return false;
+    }
+    if (alignScore != result.score) {
+        printf("Wrong score in alignment! %d should be %d\n", alignScore, result.score);
+        return false;
+    }
+    return true;
 }
