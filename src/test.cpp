@@ -93,12 +93,17 @@ int main(int argc, char * const argv[]) {
                                      modeCode, SWIMD_OVERFLOW_SIMPLE);
     finish = clock();
     double time1 = ((double)(finish-start)) / CLOCKS_PER_SEC;
-    printf("Time: %lf\n", time1);
 
-    if (resultCode != 0) {
-        printf("Overflow happened!");
+    if (resultCode == SWIMD_ERR_OVERFLOW) {
+        printf("Error: overflow happened!\n");
         exit(0);
     }
+    if (resultCode == SWIMD_ERR_NO_SIMD_SUPPORT) {
+        printf("Error: no SIMD support!\n");
+        exit(0);
+    }
+
+    printf("Time: %lf\n", time1);
     printf("Maximum: %d\n", maximumScore(results, dbLength));
     printf("\n");
 
