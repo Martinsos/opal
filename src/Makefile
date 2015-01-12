@@ -1,27 +1,27 @@
-CC = g++
+CXX = g++
 # -march=native will compile for correct simd
-CFLAGS = -march=native -Wall
+CXXFLAGS = -std=c++11 -march=native -Wall
 
 DEBUG ?= 0
 ifeq ($(DEBUG), 1)
-	CFLAGS += -g
+	CXXFLAGS += -g
 else
-	CFLAGS += -O3
+	CXXFLAGS += -O3
 endif
 
 all: test swimd_aligner
 
 swimd_aligner: Swimd.o ScoreMatrix.o swimd_aligner.cpp
-	$(CC) $(CFLAGS) Swimd.o ScoreMatrix.o swimd_aligner.cpp -o swimd_aligner
+	$(CXX) $(CXXFLAGS) Swimd.o ScoreMatrix.o swimd_aligner.cpp -o swimd_aligner
 
 ScoreMatrix.o: ScoreMatrix.cpp ScoreMatrix.hpp
-	$(CC) $(CFLAGS) -c ScoreMatrix.cpp
+	$(CXX) $(CXXFLAGS) -c ScoreMatrix.cpp
 
 test: Swimd.o test.cpp
-	$(CC) $(CFLAGS) Swimd.o test.cpp -o test
+	$(CXX) $(CXXFLAGS) Swimd.o test.cpp -o test
 
 Swimd.o: Swimd.cpp Swimd.h
-	$(CC) $(CFLAGS) -c Swimd.cpp
+	$(CXX) $(CXXFLAGS) -c Swimd.cpp
 
 clean:
 	rm *.o test swimd_aligner

@@ -17,7 +17,8 @@ Swimd offers 4 different modes of alignment: 1 local and 3 global modes, explain
 * OV: Semi-global alignment. Insertions before start of either query or target and insertions after end of either query or target are not penalized. Useful when sequences are partially overlaping or one of sequences is contained in another.
 
 #### Usage
-To use Swimd you just have to include Swimd.h in your code and compile your code together with Swimd.cpp using appropriate compiler flag for SSE, for example -msse4.1 (or just use -march which will detect your arhitecture and will also use appropriate SSE flag).
+To use Swimd you just have to include Swimd.h in your code and compile your code together with Swimd.cpp using appropriate compiler flag for SSE, for example -msse4.1 (or just use -march which will detect your arhitecture and will also use appropriate SSE flag).  
+Swimd is written for C++11 standard, so you should make sure that you compile it according to that. For `gcc`, add flag `-std=c++11`.
 
 ```
 ...
