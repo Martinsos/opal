@@ -15,12 +15,12 @@ using namespace std;
 void fillRandomly(unsigned char* seq, int seqLength, int alphabetLength);
 int * createSimpleScoreMatrix(int alphabetLength, int match, int mismatch);
 int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int dbLength, int dbSeqLengths[],
-                int gapOpen, int gapExt, int * scoreMatrix, int alphabetLength, SwimdSearchResult results[]);
+                int gapOpen, int gapExt, int * scoreMatrix, int alphabetLength, SwimdSearchResult* results[]);
 int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db, int dbLength,
                     int dbSeqLengths[], int gapOpen, int gapExt, int * scoreMatrix,
-                    int alphabetLength, SwimdSearchResult results[], const int);
+                    int alphabetLength, SwimdSearchResult* results[], const int);
 void printInts(int a[], int aLength);
-int maximumScore(SwimdSearchResult results[], int resultsLength);
+int maximumScore(SwimdSearchResult* results[], int resultsLength);
 bool checkAlignment(const unsigned char* query, int queryLength, const unsigned char* target, int targetLength,
                     const SwimdSearchResult result, int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength);
 
@@ -79,9 +79,10 @@ int main(int argc, char * const argv[]) {
     printf("Using SSE4.1!\n");
 #endif
     start = clock();
-    SwimdSearchResult results[dbLength];
+    SwimdSearchResult* results[dbLength];
     for (int i = 0; i < dbLength; i++) {
-        swimdInitSearchResult(results + i);
+        results[i] = new SwimdSearchResult;
+        swimdInitSearchResult(results[i]);
     }
     int resultCode;
     int modeCode;
@@ -115,9 +116,10 @@ int main(int argc, char * const argv[]) {
     // Run normal SW
     printf("Starting normal!\n");
     start = clock();
-    SwimdSearchResult results2[dbLength];
+    SwimdSearchResult* results2[dbLength];
     for (int i = 0; i < dbLength; i++) {
-        swimdInitSearchResult(results2 + i);
+        results2[i] = new SwimdSearchResult;
+        swimdInitSearchResult(results2[i]);
     }
     if (!strcmp(mode, "SW")) {
         resultCode = calculateSW(query, queryLength, db, dbLength, dbSeqsLengths,
@@ -144,34 +146,37 @@ int main(int argc, char * const argv[]) {
         for (int j = 0; j < dbSeqsLengths[i]; j++)
             printf("%d ", db[i][j]);
             printf("\n");
-        printf("%d", results[i].score);
-        printf(" (%d, %d)", results[i].startLocationQuery, results[i].startLocationTarget);
-        printf(" (%d, %d)\n", results[i].endLocationQuery, results[i].endLocationTarget);
+        printf("%d", results[i]->score);
+        printf(" (%d, %d)", results[i]->startLocationQuery, results[i]->startLocationTarget);
+        printf(" (%d, %d)\n", results[i]->endLocationQuery, results[i]->endLocationTarget);
         */
 
-        if (results[i].score != results2[i].score) {
-            printf("#%d: score is %d but should be %d\n", i, results[i].score, results2[i].score);
+        if (results[i]->score != results2[i]->score) {
+            printf("#%d: score is %d but should be %d\n", i, results[i]->score, results2[i]->score);
         }
-        if (results[i].endLocationTarget != results2[i].endLocationTarget) {
+        if (results[i]->endLocationTarget != results2[i]->endLocationTarget) {
             printf("#%d: end location in target is %d but should be %d\n",
-                   i, results[i].endLocationTarget, results2[i].endLocationTarget);
+                   i, results[i]->endLocationTarget, results2[i]->endLocationTarget);
         }
-        if (results[i].endLocationQuery != results2[i].endLocationQuery) {
+        if (results[i]->endLocationQuery != results2[i]->endLocationQuery) {
             printf("#%d: end location in query is %d but should be %d\n",
-                   i, results[i].endLocationQuery, results2[i].endLocationQuery);
+                   i, results[i]->endLocationQuery, results2[i]->endLocationQuery);
         }
         //printf("#%d: score -> %d, end location -> (q: %d, t: %d)\n",
-        //       i, results[i].score, results[i].endLocationQuery, results[i].endLocationTarget);
+        //       i, results[i]->score, results[i]->endLocationQuery, results[i]->endLocationTarget);
 
         checkAlignment(query, queryLength, db[i], dbSeqsLengths[i],
-                       results[i], gapOpen, gapExt, scoreMatrix, alphabetLength);
+                       *results[i], gapOpen, gapExt, scoreMatrix, alphabetLength);
     }
 
     printf("Times faster: %lf\n", time2/time1);
 
     // Free allocated memory
     for (int i = 0; i < dbLength; i++) {
-        if (results[i].alignment) free(results[i].alignment);
+        if (results[i]->alignment) free(results[i]->alignment);
+        delete results[i];
+        if (results2[i]->alignment) free(results2[i]->alignment);
+        delete results2[i];
         delete[] db[i];
     }
     delete[] scoreMatrix;
@@ -193,7 +198,7 @@ int* createSimpleScoreMatrix(int alphabetLength, int match, int mismatch) {
 
 int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int dbLength,
                 int dbSeqLengths[], int gapOpen, int gapExt, int * scoreMatrix, int alphabetLength,
-                SwimdSearchResult results[]) {
+                SwimdSearchResult* results[]) {
     int prevHs[queryLength];
     int prevEs[queryLength];
 
@@ -233,12 +238,12 @@ int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int
         if (maxH == 0) {
 
         }
-        results[seqIdx].score = maxH;
+        results[seqIdx]->score = maxH;
         if (maxH == 0) {
-            results[seqIdx].endLocationTarget = results[seqIdx].endLocationQuery = -1;
+            results[seqIdx]->endLocationTarget = results[seqIdx]->endLocationQuery = -1;
         } else {
-            results[seqIdx].endLocationTarget = endLocationTarget;
-            results[seqIdx].endLocationQuery = endLocationQuery;
+            results[seqIdx]->endLocationTarget = endLocationTarget;
+            results[seqIdx]->endLocationQuery = endLocationQuery;
         }
     }
 
@@ -247,7 +252,7 @@ int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int
 
 int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db, int dbLength,
                     int dbSeqLengths[], int gapOpen, int gapExt, int * scoreMatrix,
-                    int alphabetLength, SwimdSearchResult results[], const int mode) {
+                    int alphabetLength, SwimdSearchResult* results[], const int mode) {
     int prevHs[queryLength];
     int prevEs[queryLength];
 
@@ -309,13 +314,13 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
         }
 
         if (mode == SWIMD_MODE_NW) {
-            results[seqIdx].score = H;
-            results[seqIdx].endLocationTarget = targetLength - 1;
-            results[seqIdx].endLocationQuery = queryLength - 1;
+            results[seqIdx]->score = H;
+            results[seqIdx]->endLocationTarget = targetLength - 1;
+            results[seqIdx]->endLocationQuery = queryLength - 1;
         } else if (mode == SWIMD_MODE_OV || mode == SWIMD_MODE_HW) {
-            results[seqIdx].score = maxH;
-            results[seqIdx].endLocationTarget = endLocationTarget;
-            results[seqIdx].endLocationQuery = endLocationQuery;
+            results[seqIdx]->score = maxH;
+            results[seqIdx]->endLocationTarget = endLocationTarget;
+            results[seqIdx]->endLocationQuery = endLocationQuery;
         } else return 1;
     }
 
@@ -328,11 +333,11 @@ void printInts(int a[], int aLength) {
     printf("\n");
 }
 
-int maximumScore(SwimdSearchResult results[], int resultsLength) {
+int maximumScore(SwimdSearchResult* results[], int resultsLength) {
     int maximum = 0;
     for (int i = 0; i < resultsLength; i++)
-        if (results[i].score > maximum)
-            maximum = results[i].score;
+        if (results[i]->score > maximum)
+            maximum = results[i]->score;
     return maximum;
 }
 

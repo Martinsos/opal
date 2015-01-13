@@ -159,7 +159,7 @@ template<class SIMD>
 static int searchDatabaseSW_(unsigned char query[], int queryLength,
                              unsigned char** db, int dbLength, int dbSeqLengths[],
                              int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                             SwimdSearchResult results[], bool calculated[], int overflowMethod) {
+                             SwimdSearchResult* results[], bool calculated[], int overflowMethod) {
 
     const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -388,12 +388,12 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                         if (!overflowed[i]) {
                             // Save score and mark as calculated
                             calculated[currDbSeqsIdxs[i]] = true;
-                            swimdSearchResultSetScore(results + currDbSeqsIdxs[i], currDbSeqsBestScore[i]);
+                            swimdSearchResultSetScore(results[currDbSeqsIdxs[i]], currDbSeqsBestScore[i]);
                             if (SIMD::negRange) {
-                                results[currDbSeqsIdxs[i]].score -= LOWER_BOUND;
+                                results[currDbSeqsIdxs[i]]->score -= LOWER_BOUND;
                             }
-                            results[currDbSeqsIdxs[i]].endLocationQuery = currDbSeqsBestScoreRow[i];
-                            results[currDbSeqsIdxs[i]].endLocationTarget = currDbSeqsBestScoreColumn[i];
+                            results[currDbSeqsIdxs[i]]->endLocationQuery = currDbSeqsBestScoreRow[i];
+                            results[currDbSeqsIdxs[i]]->endLocationTarget = currDbSeqsBestScoreColumn[i];
                         }
                         currDbSeqsBestScore[i] = LOWER_BOUND;
                         // Load next sequence
@@ -471,7 +471,7 @@ static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDb
 static int searchDatabaseSW(unsigned char query[], int queryLength,
                             unsigned char** db, int dbLength, int dbSeqLengths[],
                             int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                            SwimdSearchResult results[], bool skip[], int overflowMethod) {
+                            SwimdSearchResult* results[], bool skip[], int overflowMethod) {
     int resultCode = 0;
     // Do buckets only if using buckets overflow method.
     const int chunkSize = overflowMethod == SWIMD_OVERFLOW_BUCKETS ? 1024 : dbLength;
@@ -479,7 +479,7 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
     for (int startIdx = 0; startIdx < dbLength; startIdx += chunkSize) {
         unsigned char** db_ = db + startIdx;
         int* dbSeqLengths_ = dbSeqLengths + startIdx;
-        SwimdSearchResult* results_ = results + startIdx;
+        SwimdSearchResult** results_ = results + startIdx;
         int dbLength_ = startIdx + chunkSize >= dbLength ? dbLength - startIdx : chunkSize;
         for (int i = 0; i < dbLength_; i++) {
             calculated[i] = skip ? skip[i] : false;
@@ -570,7 +570,7 @@ template<class SIMD, int MODE>
 static int searchDatabase_(unsigned char query[], int queryLength,
                            unsigned char** db, int dbLength, int dbSeqLengths[],
                            int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                           SwimdSearchResult results[], bool calculated[], int overflowMethod) {
+                           SwimdSearchResult* results[], bool calculated[], int overflowMethod) {
 
     static const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     static const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -834,7 +834,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                         if (!overflowed[i]) {
                             // Store result.
                             int dbSeqIdx = currDbSeqsIdxs[i];
-                            SwimdSearchResult *result = results + dbSeqIdx;
+                            SwimdSearchResult *result = results[dbSeqIdx];
                             calculated[dbSeqIdx] = true;
                             // Set score.
                             swimdSearchResultSetScore(result, unpackedBestScore[i]);
@@ -952,7 +952,7 @@ template <int MODE>
 static int searchDatabase(unsigned char query[], int queryLength,
                           unsigned char** db, int dbLength, int dbSeqLengths[],
                           int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                          SwimdSearchResult results[], bool skip[], int overflowMethod) {
+                          SwimdSearchResult* results[], bool skip[], int overflowMethod) {
     int resultCode = 0;
     // Do buckets only if using buckets overflow method.
     const int chunkSize = overflowMethod == SWIMD_OVERFLOW_BUCKETS ? 1024 : dbLength;
@@ -960,7 +960,7 @@ static int searchDatabase(unsigned char query[], int queryLength,
     for (int startIdx = 0; startIdx < dbLength; startIdx += chunkSize) {
         unsigned char** db_ = db + startIdx;
         int* dbSeqLengths_ = dbSeqLengths + startIdx;
-        SwimdSearchResult *results_ = results + startIdx;
+        SwimdSearchResult** results_ = results + startIdx;
         int dbLength_ = startIdx + chunkSize >= dbLength ? dbLength - startIdx : chunkSize;
         for (int i = 0; i < dbLength_; i++) {
             calculated[i] = skip ? skip[i] : false;
@@ -1216,7 +1216,7 @@ extern int swimdSearchDatabase(
     unsigned char query[], int queryLength,
     unsigned char** db, int dbLength, int dbSeqLengths[],
     int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-    SwimdSearchResult results[], int searchType, int mode, int overflowMethod) {
+    SwimdSearchResult* results[], int searchType, int mode, int overflowMethod) {
 #if !defined(__SSE4_1__) && !defined(__AVX2__)
     return SWIMD_ERR_NO_SIMD_SUPPORT;
 #else
@@ -1225,8 +1225,8 @@ extern int swimdSearchDatabase(
     // Skip recalculation of sequences that already have score and end location.
     bool *skip = new bool[dbLength];
     for (int i = 0; i < dbLength; i++) {
-        skip[i] = (!swimdSearchResultIsEmpty(results[i]) && results[i].endLocationQuery >= 0
-                   && results[i].endLocationTarget >= 0);
+        skip[i] = (!swimdSearchResultIsEmpty(*results[i]) && results[i]->endLocationQuery >= 0
+                   && results[i]->endLocationTarget >= 0);
     }
     if (mode == SWIMD_MODE_NW) {
         status = searchDatabase<SWIMD_MODE_NW>(
@@ -1255,41 +1255,41 @@ extern int swimdSearchDatabase(
         // Calculate alignment of query with each database sequence.
         unsigned char* const rQuery = createReverseCopy(query, queryLength);
         for (int i = 0; i < dbLength; i++) {
-            if (mode == SWIMD_MODE_SW && results[i].score == 0) {  // If it does not have alignment
-                results[i].alignment = NULL;
-                results[i].alignmentLength = 0;
-                results[i].startLocationQuery = results[i].startLocationTarget = -1;
-                results[i].endLocationQuery = results[i].endLocationTarget = -1;
+            if (mode == SWIMD_MODE_SW && results[i]->score == 0) {  // If it does not have alignment
+                results[i]->alignment = NULL;
+                results[i]->alignmentLength = 0;
+                results[i]->startLocationQuery = results[i]->startLocationTarget = -1;
+                results[i]->endLocationQuery = results[i]->endLocationTarget = -1;
             } else {
-                //printf("%d %d\n", results[i].endLocationQuery, results[i].endLocationTarget);
+                //printf("%d %d\n", results[i]->endLocationQuery, results[i]->endLocationTarget);
                 // Do alignment in reverse direction.
-                int alignQueryLength = results[i].endLocationQuery + 1;
+                int alignQueryLength = results[i]->endLocationQuery + 1;
                 unsigned char* alignQuery = rQuery + queryLength - alignQueryLength;
-                int alignTargetLength = results[i].endLocationTarget + 1;
+                int alignTargetLength = results[i]->endLocationTarget + 1;
                 unsigned char* alignTarget = createReverseCopy(db[i], alignTargetLength);
                 SwimdSearchResult result;
                 findAlignment(
                     alignQuery, alignQueryLength, alignTarget, alignTargetLength,
                     gapOpen, gapExt, scoreMatrix, alphabetLength,
-                    results[i].score, &result, mode);
-                //printf("%d %d\n", results[i].score, result.score);
-                assert(results[i].score == result.score);
+                    results[i]->score, &result, mode);
+                //printf("%d %d\n", results[i]->score, result.score);
+                assert(results[i]->score == result.score);
                 // Translate results.
-                results[i].startLocationQuery = alignQueryLength - result.endLocationQuery - 1;
-                results[i].startLocationTarget = alignTargetLength - result.endLocationTarget - 1;
-                results[i].alignmentLength = result.alignmentLength;
-                results[i].alignment = result.alignment;
-                revertArray(results[i].alignment, results[i].alignmentLength);
+                results[i]->startLocationQuery = alignQueryLength - result.endLocationQuery - 1;
+                results[i]->startLocationTarget = alignTargetLength - result.endLocationTarget - 1;
+                results[i]->alignmentLength = result.alignmentLength;
+                results[i]->alignment = result.alignment;
+                revertArray(results[i]->alignment, results[i]->alignmentLength);
                 free(alignTarget);
             }
         }
         free(rQuery);
     } else {
         for (int i = 0; i < dbLength; i++) {
-            results[i].alignment = NULL;
-            results[i].alignmentLength = -1;
-            results[i].startLocationQuery = -1;
-            results[i].startLocationTarget = -1;
+            results[i]->alignment = NULL;
+            results[i]->alignmentLength = -1;
+            results[i]->startLocationQuery = -1;
+            results[i]->startLocationTarget = -1;
         }
     }
 
@@ -1301,7 +1301,7 @@ extern int swimdSearchDatabase(
 extern int swimdSearchDatabaseCharSW(
     unsigned char query[], int queryLength, unsigned char** db, int dbLength,
     int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
-    int alphabetLength, SwimdSearchResult results[]) {
+    int alphabetLength, SwimdSearchResult* results[]) {
 #if !defined(__SSE4_1__) && !defined(__AVX2__)
     return SWIMD_ERR_NO_SIMD_SUPPORT;
 #else
@@ -1315,8 +1315,8 @@ extern int swimdSearchDatabaseCharSW(
         SWIMD_OVERFLOW_SIMPLE);
     for (int i = 0; i < dbLength; i++) {
         if (!calculated[i]) {
-            results[i].score = -1;
-            results[i].scoreSet = 0;
+            results[i]->score = -1;
+            results[i]->scoreSet = 0;
         }
     }
     delete[] calculated;

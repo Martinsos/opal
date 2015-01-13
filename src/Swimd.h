@@ -109,8 +109,12 @@ extern "C" {
      * @param [in] gapOpen
      * @param [in] gapExt
      * @param [in] scoreMatrix Matrix of dimensions (alphabetLength, alphabetLength).
+     *     It is array of length alphabetLength * alphabetLength, where memory is organized
+     *     row by row: row0row1row2...rowN.
+     *     When there is a (mis)match of element Q from query and element T from target,
+     *     its score is read from scoreMatrix[Q * alphabetLength + T].
      * @param [in] alphabetLength
-     * @param [in|out] results Array where result for every database sequence is stored.
+     * @param [in|out] results Results of search are written here, for each sequence.
      *     If a result has score and end location already calculated, they will not be
      *     calculated again, and if you are searching for alignment, they will be used
      *     to find alignment (that way you can reuse previous result).
@@ -142,9 +146,9 @@ extern "C" {
      * @return 0 if all okay, error code otherwise.
      */
     int swimdSearchDatabase(
-        unsigned char query[], int queryLength, unsigned char** db, int dbLength,
+        unsigned char query[], int queryLength, unsigned char* db[], int dbLength,
         int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
-        int alphabetLength, SwimdSearchResult results[],
+        int alphabetLength, SwimdSearchResult* results[],
         int searchType, int mode, int overflowMethod);
 
     /**
@@ -156,7 +160,7 @@ extern "C" {
     int swimdSearchDatabaseCharSW(
         unsigned char query[], int queryLength, unsigned char** db, int dbLength,
         int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
-        int alphabetLength, SwimdSearchResult results[]);
+        int alphabetLength, SwimdSearchResult* results[]);
 
 #ifdef __cplusplus
 }

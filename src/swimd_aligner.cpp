@@ -138,9 +138,10 @@ int main(int argc, char * const argv[]) {
         printf("Read %d database sequences, %d residues total.\n", dbLength, dbNumResidues);
 
         // ----------------------------- MAIN CALCULATION ----------------------------- //
-        SwimdSearchResult* results = new SwimdSearchResult[dbLength];
+        SwimdSearchResult** results = new SwimdSearchResult*[dbLength];
         for (int i = 0; i < dbLength; i++) {
-            swimdInitSearchResult(results + i);
+            results[i] = new SwimdSearchResult;
+            swimdInitSearchResult(results[i]);
         }
         printf("\nComparing query to database...");
         fflush(stdout);
@@ -156,26 +157,24 @@ int main(int argc, char * const argv[]) {
         // ---------------------------------------------------------------------------- //
         printf("\nFinished!\n");
 
-        printf("search type: %d\n", searchType);
-
         if (!silent) {
             printf("\n#<i>: <score> (<query start>, <target start>) (<query end>, <target end>)\n");
             for (int i = 0; i < dbLength; i++) {
-                printf("#%d: %d", wholeDbLength + i, results[i].score);
-                if (results[i].startLocationQuery >= 0) {
-                    printf(" (%d, %d)", results[i].startLocationQuery, results[i].startLocationTarget);
+                printf("#%d: %d", wholeDbLength + i, results[i]->score);
+                if (results[i]->startLocationQuery >= 0) {
+                    printf(" (%d, %d)", results[i]->startLocationQuery, results[i]->startLocationTarget);
                 } else {
                     printf(" (?, ?)");
                 }
-                if (results[i].endLocationQuery >= 0) {
-                    printf(" (%d, %d)", results[i].endLocationQuery, results[i].endLocationTarget);
+                if (results[i]->endLocationQuery >= 0) {
+                    printf(" (%d, %d)", results[i]->endLocationQuery, results[i]->endLocationTarget);
                 } else {
                     printf(" (?, ?)");
                 }
                 printf("\n");
 
-                if (results[i].alignment) {
-                    printAlignment(query, queryLength, db[i], dbSeqLengths[i], results[i], alphabet);
+                if (results[i]->alignment) {
+                    printAlignment(query, queryLength, db[i], dbSeqLengths[i], *results[i], alphabet);
                 }
             }
         }
@@ -183,13 +182,14 @@ int main(int argc, char * const argv[]) {
         wholeDbLength += dbLength;
 
         for (int i = 0; i < dbLength; i++) {
-            if (results[i].alignment) {
-                free(results[i].alignment);
+            if (results[i]->alignment) {
+                free(results[i]->alignment);
             }
+            delete (results[i]);
         }
+        delete[] results;
         delete[] db;
         delete[] dbSeqLengths;
-        delete[] results;
         delete dbSequences;
     }
 
