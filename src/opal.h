@@ -1,5 +1,5 @@
-#ifndef SWIMD_H
-#define SWIMD_H
+#ifndef OPAL_H
+#define OPAL_H
 
 /***********************************************************************************
  *  - adapts score type and reports overflow if score does not fit in int
@@ -166,4 +166,4 @@ extern "C" {
 }
 #endif
 
-#endif /* SWIMD_H */
+#endif /* OPAL_H */

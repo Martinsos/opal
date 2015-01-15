@@ -9,19 +9,19 @@ else
 	CXXFLAGS += -O3
 endif
 
-all: test swimd_aligner
+all: test opal_aligner
 
-swimd_aligner: Swimd.o ScoreMatrix.o swimd_aligner.cpp
-	$(CXX) $(CXXFLAGS) Swimd.o ScoreMatrix.o swimd_aligner.cpp -o swimd_aligner
+opal_aligner: opal.o ScoreMatrix.o opal_aligner.cpp
+	$(CXX) $(CXXFLAGS) opal.o ScoreMatrix.o opal_aligner.cpp -o opal_aligner
 
 ScoreMatrix.o: ScoreMatrix.cpp ScoreMatrix.hpp
 	$(CXX) $(CXXFLAGS) -c ScoreMatrix.cpp
 
-test: Swimd.o ScoreMatrix.o test.cpp
-	$(CXX) $(CXXFLAGS) Swimd.o ScoreMatrix.o test.cpp -o test
+test: opal.o ScoreMatrix.o test.cpp
+	$(CXX) $(CXXFLAGS) opal.o ScoreMatrix.o test.cpp -o test
 
-Swimd.o: Swimd.cpp Swimd.h
-	$(CXX) $(CXXFLAGS) -c Swimd.cpp
+opal.o: opal.cpp opal.h
+	$(CXX) $(CXXFLAGS) -c opal.cpp
 
 clean:
-	rm *.o test swimd_aligner
+	rm *.o test opal_aligner

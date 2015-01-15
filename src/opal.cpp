@@ -9,7 +9,7 @@ extern "C" {
 #include <immintrin.h> // AVX2 and lower
 }
 
-#include "Swimd.h"
+#include "opal.h"
 
 
 // I define aliases for SSE intrinsics, so they can be used in code not depending on SSE generation.

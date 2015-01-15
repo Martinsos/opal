@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <cstring>
 
-#include "Swimd.h"
+#include "opal.h"
 #include "ScoreMatrix.hpp"
 
 using namespace std;
