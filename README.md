@@ -1,28 +1,28 @@
-# Swimd
+# OpAl
 
-Swimd is C/C++ library for fast query vs database sequence alignment using SSE. 
-Swimd is implemented mainly by Rognes's "Faster Smith-Waterman database searches with inter-sequence SIMD parallelisation". 
-Main difference is that Swimd offers support for AVX2 and 4 alignment modes instead of just Smith-Waterman.
+OpAl (ex Swimd) is C/C++ library for fast query vs database sequence alignment using SSE. 
+OpAl is implemented mainly by Rognes's "Faster Smith-Waterman database searches with inter-sequence SIMD parallelisation". 
+Main difference is that OpAl offers support for AVX2 and 4 alignment modes instead of just Smith-Waterman.
 
 #### Requirements
 SSE4.1 or higher.
-If AVX2 is available, Swimd will consume two times more sequences and will therefore work two times faster.
+If AVX2 is available, OpAl will consume two times more sequences and will therefore work two times faster.
 By compiling code with makefile and running ./test, you can see if you have SSE4.1 or AVX2 and also see if everything is working.
 
 #### Alignment modes
-Swimd offers 4 different modes of alignment: 1 local and 3 global modes, explained below.
+OpAl offers 4 different modes of alignment: 1 local and 3 global modes, explained below.
 * SW: Local alignment (Smith-Waterman). Useful for finding similar regions in not necessarily similar sequences, and also for finding shorter sequence in longer sequence (text searching).
 * NW: Global alignment (Needleman-Wunsch). Useful for detecting if two sequences of similar lengths are similar.
 * HW: Semi-global alignment. Insertions before query start and insertions after query end are not penalized. Useful for finding query in target.
 * OV: Semi-global alignment. Insertions before start of either query or target and insertions after end of either query or target are not penalized. Useful when sequences are partially overlaping or one of sequences is contained in another.
 
 #### Usage
-To use Swimd you just have to include Swimd.h in your code and compile your code together with Swimd.cpp using appropriate compiler flag for SSE, for example -msse4.1 (or just use -march which will detect your arhitecture and will also use appropriate SSE flag).  
-Swimd is written for C++11 standard, so you should make sure that you compile it according to that. For `gcc`, add flag `-std=c++11`.
+To use OpAl you just have to include opal.h in your code and compile your code together with opal.cpp using appropriate compiler flag for SSE, for example -msse4.1 (or just use -march which will detect your arhitecture and will also use appropriate SSE flag).  
+OpAl is written for C++11 standard, so you should make sure that you compile it according to that. For `gcc`, add flag `-std=c++11`.
 
 ```
 ...
-#include "Swimd.h"
+#include "opal.h"
 ...
 ```
 
@@ -49,31 +49,31 @@ unsigned char dbSeq4[9] = {2,3,3,3,1,1,2,2,0};
 unsigned char* db[4] = { dbSeq1, dbSeq2, dbSeq3, dbSeq4 };
 int dbSeqsLengths[4] = {14, 12, 13, 9};
 
-SwimdSearchResult results[4];
-int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths,
-                                     gapOpen, gapExt, scoreMatrix, alphabetLength, results,
-                                     SWIMD_MODE_SW, SWIMD_OVERFLOW_BUCKETS);
+OpalSearchResult results[4];
+int resultCode = opalSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths,
+                                    gapOpen, gapExt, scoreMatrix, alphabetLength, results,
+                                    OPAL_MODE_SW, OPAL_OVERFLOW_BUCKETS);
 printf("%d %d %d %d\n", results[0].score, results[1].score, results[2].score, results[3].score);
 ...
 ```
 
-For more examples of usage take a look at **test.cpp** and **swimd_aligner.cpp**.
-For detailed documentation check out **swimd.h**.
+For more examples of usage take a look at **test.cpp** and **opal_aligner.cpp**.
+For detailed documentation check out **opal.h**.
 
-## Swimd aligner
-In order to compile and use simple aligner that uses Swimd run makefile in src:
+## OpAl aligner
+In order to compile and use simple aligner that uses OpAl run makefile in src:
 
     cd src
     make
 
-Type `./swimd_aligner` for help.
+Type `./opal_aligner` for help.
 
 Examples of usage:
 
-    ./swimd_aligner ../test_data/query/O74807.fasta ../test_data/db/uniprot_sprot15.fasta
-    ./swimd_aligner -p ../test_data/query/O74807.fasta ../test_data/db/uniprot_sprot15.fasta
-    ./swimd_aligner -s ../test_data/query/P18080.fasta ../test_data/db/uniprot_sprot12071.fasta
-    ./swimd_aligner -s -a NW ../test_data/query/P18080.fasta ../test_data/db/uniprot_sprot12071.fasta
+    ./opal_aligner ../test_data/query/O74807.fasta ../test_data/db/uniprot_sprot15.fasta
+    ./opal_aligner -p ../test_data/query/O74807.fasta ../test_data/db/uniprot_sprot15.fasta
+    ./opal_aligner -s ../test_data/query/P18080.fasta ../test_data/db/uniprot_sprot12071.fasta
+    ./opal_aligner -s -a NW ../test_data/query/P18080.fasta ../test_data/db/uniprot_sprot12071.fasta
 
 #### Test data
 In test_data/ there are two directories, query/ and db/.
