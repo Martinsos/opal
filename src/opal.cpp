@@ -159,7 +159,7 @@ template<class SIMD>
 static int searchDatabaseSW_(unsigned char query[], int queryLength,
                              unsigned char** db, int dbLength, int dbSeqLengths[],
                              int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                             SwimdSearchResult* results[], bool calculated[], int overflowMethod) {
+                             OpalSearchResult* results[], bool calculated[], int overflowMethod) {
 
     const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -174,7 +174,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     if (!SIMD::satArthm) {
         // These extra limits are enforced so overflow could be detected more efficiently
         if (gapOpen <= LOWER_BOUND/2 || UPPER_BOUND/2 <= gapOpen || gapExt <= LOWER_BOUND/2 || UPPER_BOUND/2 <= gapExt) {
-            return SWIMD_ERR_OVERFLOW;
+            return OPAL_ERR_OVERFLOW;
         }
     }
 
@@ -182,11 +182,11 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         for (int c = 0; c < alphabetLength; c++) {
             int score = scoreMatrix[r * alphabetLength + c];
             if (score < LOWER_BOUND || UPPER_BOUND < score) {
-                return SWIMD_ERR_OVERFLOW;
+                return OPAL_ERR_OVERFLOW;
             }
             if (!SIMD::satArthm) {
                 if (score <= LOWER_BOUND/2 || UPPER_BOUND/2 <= score)
-                    return SWIMD_ERR_OVERFLOW;
+                    return OPAL_ERR_OVERFLOW;
             }
         }
     // ------------------------------------------------------------------ //
@@ -352,8 +352,8 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         }
         overflowOccured = overflowOccured || overflowDetected;
         // In buckets method, we stop calculation when overflow is detected.
-        if (overflowMethod == SWIMD_OVERFLOW_BUCKETS && overflowDetected) {
-            return SWIMD_ERR_OVERFLOW;
+        if (overflowMethod == OPAL_OVERFLOW_BUCKETS && overflowDetected) {
+            return OPAL_ERR_OVERFLOW;
         }
         // ---------------------------------------------------------------------- //
 
@@ -388,7 +388,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                         if (!overflowed[i]) {
                             // Save score and mark as calculated
                             calculated[currDbSeqsIdxs[i]] = true;
-                            swimdSearchResultSetScore(results[currDbSeqsIdxs[i]], currDbSeqsBestScore[i]);
+                            opalSearchResultSetScore(results[currDbSeqsIdxs[i]], currDbSeqsBestScore[i]);
                             if (SIMD::negRange) {
                                 results[currDbSeqsIdxs[i]]->score -= LOWER_BOUND;
                             }
@@ -439,7 +439,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     }
 
     if (overflowOccured) {
-        return SWIMD_ERR_OVERFLOW;
+        return OPAL_ERR_OVERFLOW;
     }
     return 0;
 }
@@ -471,15 +471,15 @@ static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDb
 static int searchDatabaseSW(unsigned char query[], int queryLength,
                             unsigned char** db, int dbLength, int dbSeqLengths[],
                             int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                            SwimdSearchResult* results[], bool skip[], int overflowMethod) {
+                            OpalSearchResult* results[], bool skip[], int overflowMethod) {
     int resultCode = 0;
     // Do buckets only if using buckets overflow method.
-    const int chunkSize = overflowMethod == SWIMD_OVERFLOW_BUCKETS ? 1024 : dbLength;
+    const int chunkSize = overflowMethod == OPAL_OVERFLOW_BUCKETS ? 1024 : dbLength;
     bool* calculated = new bool[chunkSize];
     for (int startIdx = 0; startIdx < dbLength; startIdx += chunkSize) {
         unsigned char** db_ = db + startIdx;
         int* dbSeqLengths_ = dbSeqLengths + startIdx;
-        SwimdSearchResult** results_ = results + startIdx;
+        OpalSearchResult** results_ = results + startIdx;
         int dbLength_ = startIdx + chunkSize >= dbLength ? dbLength - startIdx : chunkSize;
         for (int i = 0; i < dbLength_; i++) {
             calculated[i] = skip ? skip[i] : false;
@@ -488,12 +488,12 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
             query, queryLength, db_, dbLength_, dbSeqLengths_,
             gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
             calculated, overflowMethod);
-        if (resultCode == SWIMD_ERR_OVERFLOW) {
+        if (resultCode == OPAL_ERR_OVERFLOW) {
             resultCode = searchDatabaseSW_< SimdSW<short> >(
                 query, queryLength, db_, dbLength_, dbSeqLengths_,
                 gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
                 calculated, overflowMethod);
-            if (resultCode == SWIMD_ERR_OVERFLOW) {
+            if (resultCode == OPAL_ERR_OVERFLOW) {
                 resultCode = searchDatabaseSW_< SimdSW<int> >(
                     query, queryLength,
                     db_, dbLength_, dbSeqLengths_,
@@ -570,7 +570,7 @@ template<class SIMD, int MODE>
 static int searchDatabase_(unsigned char query[], int queryLength,
                            unsigned char** db, int dbLength, int dbSeqLengths[],
                            int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                           SwimdSearchResult* results[], bool calculated[], int overflowMethod) {
+                           OpalSearchResult* results[], bool calculated[], int overflowMethod) {
 
     static const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     static const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -643,7 +643,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
     __mxxxi prevEs[queryLength];
     // Initialize all values
     for (int r = 0; r < queryLength; r++) {
-        if (MODE == SWIMD_MODE_OV)
+        if (MODE == OPAL_MODE_OV)
             prevHs[r] = ZERO_SIMD;
         else { // - Q - r * R
             if (r == 0)
@@ -657,7 +657,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
 
     // u - up, ul - up left
     __mxxxi uH, ulH;
-    if (MODE == SWIMD_MODE_NW) {
+    if (MODE == OPAL_MODE_NW) {
         ulH = ZERO_SIMD;
         uH = SIMD::sub(R, Q); // -Q + R
     }
@@ -688,7 +688,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         __mxxxi uF = LOWER_SCORE_BOUND_SIMD;
 
         // Database sequence has fixed start and end only in NW
-        if (MODE == SWIMD_MODE_NW) {
+        if (MODE == OPAL_MODE_NW) {
             if (seqJustLoaded) {
                 typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(16)));
                 for (int i = 0; i < SIMD::numSeqs; i++)
@@ -712,7 +712,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
 
         __mxxxi firstRow_uH, firstRow_ulH; // Values of uH and ulH from first row of column
 
-        if (MODE == SWIMD_MODE_NW) {
+        if (MODE == OPAL_MODE_NW) {
             firstRow_uH = uH;
             firstRow_ulH = ulH;
         }
@@ -747,7 +747,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
 
         maxLastRowH = SIMD::max(maxLastRowH, H);
 
-        if (MODE == SWIMD_MODE_NW) {
+        if (MODE == OPAL_MODE_NW) {
             uH = firstRow_uH;
             ulH = firstRow_ulH;
         }
@@ -786,13 +786,13 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         }
         overflowOccured = overflowOccured || overflowDetected;
         // In buckets method, we stop calculation when overflow is detected.
-        if (overflowMethod == SWIMD_OVERFLOW_BUCKETS && overflowDetected) {
-            return SWIMD_ERR_OVERFLOW;
+        if (overflowMethod == OPAL_OVERFLOW_BUCKETS && overflowDetected) {
+            return OPAL_ERR_OVERFLOW;
         }
         // ---------------------------------------------------------------------- //
 
         // ------------------ Store end location of best score ------------------ //
-        if (MODE == SWIMD_MODE_HW || MODE == SWIMD_MODE_OV) {
+        if (MODE == OPAL_MODE_HW || MODE == OPAL_MODE_OV) {
             // Determine the column of best score.
             __mxxxi greater = SIMD::cmpgt(maxLastRowH, prevMaxLastRowH);
             typename SIMD::type unpackedGreater[SIMD::numSeqs];
@@ -815,11 +815,11 @@ static int searchDatabase_(unsigned char query[], int queryLength,
 
             // Calculate best scores
             __mxxxi bestScore;
-            if (MODE == SWIMD_MODE_OV)
+            if (MODE == OPAL_MODE_OV)
                 bestScore = SIMD::max(maxH, maxLastRowH); // Maximum of last row and column
-            if (MODE == SWIMD_MODE_HW)
+            if (MODE == OPAL_MODE_HW)
                 bestScore = maxLastRowH;
-            if (MODE == SWIMD_MODE_NW)
+            if (MODE == OPAL_MODE_NW)
                 bestScore = H;
             typename SIMD::type unpackedBestScore[SIMD::numSeqs];
             _mmxxx_store_si((__mxxxi*)unpackedBestScore, bestScore);
@@ -834,20 +834,20 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                         if (!overflowed[i]) {
                             // Store result.
                             int dbSeqIdx = currDbSeqsIdxs[i];
-                            SwimdSearchResult *result = results[dbSeqIdx];
+                            OpalSearchResult *result = results[dbSeqIdx];
                             calculated[dbSeqIdx] = true;
                             // Set score.
-                            swimdSearchResultSetScore(result, unpackedBestScore[i]);
+                            opalSearchResultSetScore(result, unpackedBestScore[i]);
                             // Set end location.
-                            if (MODE == SWIMD_MODE_NW) {
+                            if (MODE == OPAL_MODE_NW) {
                                 result->endLocationQuery = queryLength - 1;
                                 result->endLocationTarget = dbSeqLengths[dbSeqIdx] - 1;
                             }
-                            if (MODE == SWIMD_MODE_HW) {
+                            if (MODE == OPAL_MODE_HW) {
                                 result->endLocationQuery = queryLength - 1;
                                 result->endLocationTarget = currDbSeqsBestScoreColumn[i];
                             }
-                            if (MODE == SWIMD_MODE_OV) {
+                            if (MODE == OPAL_MODE_OV) {
                                 // This unpacking will repeat unnecessarily if there are multiple sequences
                                 // ending at the same time, however that will happen in very rare occasions.
                                 // TODO(martin): always unpack only once.
@@ -906,7 +906,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
             // Set prevHs
             for (int r = 0; r < queryLength; r++) {
                 prevHs[r] = _mmxxx_and_si(prevHs[r], resetMaskPacked);
-                if (MODE != SWIMD_MODE_OV) {
+                if (MODE != OPAL_MODE_OV) {
                     if (r == 0) {
                         prevHs[0] = SIMD::sub(prevHs[0], _mmxxx_and_si(setMaskPacked, Q));
                     } else {
@@ -916,7 +916,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
             }
 
             // Set ulH and uH if NW
-            if (MODE == SWIMD_MODE_NW) {
+            if (MODE == OPAL_MODE_NW) {
                 ulH = _mmxxx_and_si(ulH, resetMaskPacked); // to 0
                 // Set uH channels to -Q + R
                 uH = _mmxxx_and_si(uH, resetMaskPacked);
@@ -939,7 +939,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
     }
 
     if (overflowOccured) {
-        return SWIMD_ERR_OVERFLOW;
+        return OPAL_ERR_OVERFLOW;
     }
     return 0;
 }
@@ -952,15 +952,15 @@ template <int MODE>
 static int searchDatabase(unsigned char query[], int queryLength,
                           unsigned char** db, int dbLength, int dbSeqLengths[],
                           int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                          SwimdSearchResult* results[], bool skip[], int overflowMethod) {
+                          OpalSearchResult* results[], bool skip[], int overflowMethod) {
     int resultCode = 0;
     // Do buckets only if using buckets overflow method.
-    const int chunkSize = overflowMethod == SWIMD_OVERFLOW_BUCKETS ? 1024 : dbLength;
+    const int chunkSize = overflowMethod == OPAL_OVERFLOW_BUCKETS ? 1024 : dbLength;
     bool* calculated = new bool[chunkSize];
     for (int startIdx = 0; startIdx < dbLength; startIdx += chunkSize) {
         unsigned char** db_ = db + startIdx;
         int* dbSeqLengths_ = dbSeqLengths + startIdx;
-        SwimdSearchResult** results_ = results + startIdx;
+        OpalSearchResult** results_ = results + startIdx;
         int dbLength_ = startIdx + chunkSize >= dbLength ? dbLength - startIdx : chunkSize;
         for (int i = 0; i < dbLength_; i++) {
             calculated[i] = skip ? skip[i] : false;
@@ -969,12 +969,12 @@ static int searchDatabase(unsigned char query[], int queryLength,
             (query, queryLength, db_, dbLength_, dbSeqLengths_,
              gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
              calculated, overflowMethod);
-        if (resultCode == SWIMD_ERR_OVERFLOW) {
+        if (resultCode == OPAL_ERR_OVERFLOW) {
             resultCode = searchDatabase_< Simd<short>, MODE >
                 (query, queryLength, db_, dbLength_, dbSeqLengths_,
                  gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
                  calculated, overflowMethod);
-            if (resultCode == SWIMD_ERR_OVERFLOW) {
+            if (resultCode == OPAL_ERR_OVERFLOW) {
                 resultCode = searchDatabase_< Simd<int>, MODE >
                     (query, queryLength, db_, dbLength_, dbSeqLengths_,
                      gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
@@ -1045,7 +1045,7 @@ public:
 static void findAlignment(
     const unsigned char query[], const int queryLength, const unsigned char target[], const int targetLength,
     const int gapOpen, const int gapExt, const int* scoreMatrix, const int alphabetLength,
-    const int scoreLimit, SwimdSearchResult* result, const int mode) {
+    const int scoreLimit, OpalSearchResult* result, const int mode) {
     /*
     printf("Query: ");
     for (int i = 0; i < queryLength; i++) {
@@ -1093,8 +1093,8 @@ static void findAlignment(
 
             // If mode is SW, track max score of all cells.
             // If mode is OV, track max score in last column.
-            if (mode == SWIMD_MODE_SW
-                || (mode == SWIMD_MODE_OV && c == targetLength - 1)) {
+            if (mode == OPAL_MODE_SW
+                || (mode == OPAL_MODE_OV && c == targetLength - 1)) {
                 maxScore = std::max(maxScore, H);
             }
 
@@ -1107,7 +1107,7 @@ static void findAlignment(
             matrix[c][r].F = F;
         }
 
-        if (mode == SWIMD_MODE_HW || mode == SWIMD_MODE_OV) {
+        if (mode == OPAL_MODE_HW || mode == OPAL_MODE_OV) {
             maxScore = std::max(maxScore, H);  // Track max score in last row.
         }
         prevColumn = matrix[c];
@@ -1119,18 +1119,18 @@ static void findAlignment(
     result->scoreSet = 1;
     // Determine score and end location of alignment.
     switch (mode) {
-    case SWIMD_MODE_NW:
-        swimdSearchResultSetScore(result, H);
+    case OPAL_MODE_NW:
+        opalSearchResultSetScore(result, H);
         result->endLocationTarget = targetLength - 1;
         result->endLocationQuery = queryLength - 1;
         break;
-    case SWIMD_MODE_HW:
-        swimdSearchResultSetScore(result, maxScore);
+    case OPAL_MODE_HW:
+        opalSearchResultSetScore(result, maxScore);
         result->endLocationTarget = lastColumnIdx;
         result->endLocationQuery = queryLength - 1;
         break;
-    case SWIMD_MODE_SW: case SWIMD_MODE_OV:
-        swimdSearchResultSetScore(result, maxScore);
+    case OPAL_MODE_SW: case OPAL_MODE_OV:
+        opalSearchResultSetScore(result, maxScore);
         result->endLocationTarget = lastColumnIdx;
         int r;
         for (r = 0; r < queryLength && matrix[lastColumnIdx][r].H != maxScore; r++);
@@ -1161,19 +1161,19 @@ static void findAlignment(
             } else if (cell.H == cell.F) {
                 field = Cell::Field::F;
             } else {
-                alignment[alignmentLength++] = (query[rIdx] == target[cIdx] ? SWIMD_ALIGN_MATCH
-                                                : SWIMD_ALIGN_MISMATCH);
+                alignment[alignmentLength++] = (query[rIdx] == target[cIdx] ? OPAL_ALIGN_MATCH
+                                                : OPAL_ALIGN_MISMATCH);
                 cIdx--; rIdx--;
             }
             break;
         case Cell::Field::E:
             field = (cell.E == matrix[cIdx - 1][rIdx].H - gapOpen) ? Cell::Field::H : Cell::Field::E;
-            alignment[alignmentLength++] = SWIMD_ALIGN_INS;
+            alignment[alignmentLength++] = OPAL_ALIGN_INS;
             cIdx--;
             break;
         case Cell::Field::F:
             field = (cell.F == matrix[cIdx][rIdx - 1].H - gapOpen) ? Cell::Field::H : Cell::Field::F;
-            alignment[alignmentLength++] = SWIMD_ALIGN_DEL;
+            alignment[alignmentLength++] = OPAL_ALIGN_DEL;
             rIdx--;
             break;
         }
@@ -1181,11 +1181,11 @@ static void findAlignment(
     // I stop when matrix border is reached, so I have to add indels at start of alignment
     // manually (they do not have entry in operations). Only one of these two loops will trigger.
     while (rIdx >= 0) {
-        alignment[alignmentLength] = SWIMD_ALIGN_DEL;
+        alignment[alignmentLength] = OPAL_ALIGN_DEL;
         alignmentLength++; rIdx--;
     }
     while (cIdx >= 0) {
-        alignment[alignmentLength] = SWIMD_ALIGN_INS;
+        alignment[alignmentLength] = OPAL_ALIGN_INS;
         alignmentLength++; cIdx--;
     }
     //printf("rIdx: %d, cIdx: %d\n", rIdx, cIdx);
@@ -1212,50 +1212,50 @@ static void findAlignment(
 }
 
 
-extern int swimdSearchDatabase(
+extern int opalSearchDatabase(
     unsigned char query[], int queryLength,
     unsigned char** db, int dbLength, int dbSeqLengths[],
     int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-    SwimdSearchResult* results[], int searchType, int mode, int overflowMethod) {
+    OpalSearchResult* results[], int searchType, int mode, int overflowMethod) {
 #if !defined(__SSE4_1__) && !defined(__AVX2__)
-    return SWIMD_ERR_NO_SIMD_SUPPORT;
+    return OPAL_ERR_NO_SIMD_SUPPORT;
 #else
     // Calculate score and end location.
     int status;
     // Skip recalculation of sequences that already have score and end location.
     bool *skip = new bool[dbLength];
     for (int i = 0; i < dbLength; i++) {
-        skip[i] = (!swimdSearchResultIsEmpty(*results[i]) && results[i]->endLocationQuery >= 0
+        skip[i] = (!opalSearchResultIsEmpty(*results[i]) && results[i]->endLocationQuery >= 0
                    && results[i]->endLocationTarget >= 0);
     }
-    if (mode == SWIMD_MODE_NW) {
-        status = searchDatabase<SWIMD_MODE_NW>(
+    if (mode == OPAL_MODE_NW) {
+        status = searchDatabase<OPAL_MODE_NW>(
             query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
             scoreMatrix, alphabetLength, results, skip, overflowMethod);
-    } else if (mode == SWIMD_MODE_HW) {
-        status = searchDatabase<SWIMD_MODE_HW>(
+    } else if (mode == OPAL_MODE_HW) {
+        status = searchDatabase<OPAL_MODE_HW>(
             query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
             scoreMatrix, alphabetLength, results, skip, overflowMethod);
-    } else if (mode == SWIMD_MODE_OV) {
-        status = searchDatabase<SWIMD_MODE_OV>(
+    } else if (mode == OPAL_MODE_OV) {
+        status = searchDatabase<OPAL_MODE_OV>(
             query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
             scoreMatrix, alphabetLength, results, skip, overflowMethod);
-    } else if (mode == SWIMD_MODE_SW) {
+    } else if (mode == OPAL_MODE_SW) {
         status = searchDatabaseSW(
             query, queryLength, db, dbLength, dbSeqLengths,
             gapOpen, gapExt, scoreMatrix, alphabetLength,
             results, skip, overflowMethod);
     } else {
-        status = SWIMD_ERR_INVALID_MODE;
+        status = OPAL_ERR_INVALID_MODE;
     }
     delete[] skip;
     if (status) return status;
 
-    if (searchType == SWIMD_SEARCH_ALIGNMENT) {
+    if (searchType == OPAL_SEARCH_ALIGNMENT) {
         // Calculate alignment of query with each database sequence.
         unsigned char* const rQuery = createReverseCopy(query, queryLength);
         for (int i = 0; i < dbLength; i++) {
-            if (mode == SWIMD_MODE_SW && results[i]->score == 0) {  // If it does not have alignment
+            if (mode == OPAL_MODE_SW && results[i]->score == 0) {  // If it does not have alignment
                 results[i]->alignment = NULL;
                 results[i]->alignmentLength = 0;
                 results[i]->startLocationQuery = results[i]->startLocationTarget = -1;
@@ -1267,7 +1267,7 @@ extern int swimdSearchDatabase(
                 unsigned char* alignQuery = rQuery + queryLength - alignQueryLength;
                 int alignTargetLength = results[i]->endLocationTarget + 1;
                 unsigned char* alignTarget = createReverseCopy(db[i], alignTargetLength);
-                SwimdSearchResult result;
+                OpalSearchResult result;
                 findAlignment(
                     alignQuery, alignQueryLength, alignTarget, alignTargetLength,
                     gapOpen, gapExt, scoreMatrix, alphabetLength,
@@ -1298,12 +1298,12 @@ extern int swimdSearchDatabase(
 }
 
 
-extern int swimdSearchDatabaseCharSW(
+extern int opalSearchDatabaseCharSW(
     unsigned char query[], int queryLength, unsigned char** db, int dbLength,
     int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
-    int alphabetLength, SwimdSearchResult* results[]) {
+    int alphabetLength, OpalSearchResult* results[]) {
 #if !defined(__SSE4_1__) && !defined(__AVX2__)
-    return SWIMD_ERR_NO_SIMD_SUPPORT;
+    return OPAL_ERR_NO_SIMD_SUPPORT;
 #else
     bool* calculated = new bool[dbLength];
     for (int i = 0; i < dbLength; i++) {
@@ -1312,7 +1312,7 @@ extern int swimdSearchDatabaseCharSW(
     int resultCode = searchDatabaseSW_< SimdSW<char> >(
         query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
         scoreMatrix, alphabetLength, results, calculated,
-        SWIMD_OVERFLOW_SIMPLE);
+        OPAL_OVERFLOW_SIMPLE);
     for (int i = 0; i < dbLength; i++) {
         if (!calculated[i]) {
             results[i]->score = -1;
@@ -1325,7 +1325,7 @@ extern int swimdSearchDatabaseCharSW(
 }
 
 
-extern void swimdInitSearchResult(SwimdSearchResult* result) {
+extern void opalInitSearchResult(OpalSearchResult* result) {
     result->scoreSet = 0;
     result->startLocationTarget = result->startLocationQuery = -1;
     result->endLocationTarget = result->endLocationQuery = -1;
@@ -1333,11 +1333,11 @@ extern void swimdInitSearchResult(SwimdSearchResult* result) {
     result->alignmentLength = 0;
 }
 
-extern int swimdSearchResultIsEmpty(const SwimdSearchResult result) {
+extern int opalSearchResultIsEmpty(const OpalSearchResult result) {
     return !result.scoreSet;
 }
 
-extern void swimdSearchResultSetScore(SwimdSearchResult* result, int score) {
+extern void opalSearchResultSetScore(OpalSearchResult* result, int score) {
     result->scoreSet = 1;
     result->score = score;
 }

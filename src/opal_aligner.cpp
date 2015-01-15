@@ -15,7 +15,7 @@ using namespace std;
 bool readFastaSequences(FILE* &file, unsigned char* alphabet, int alphabetLength, vector< vector<unsigned char> >* seqs);
 void printAlignment(const unsigned char* query, const int queryLength,
                     const unsigned char* target, const int targetLength,
-                    const SwimdSearchResult result, const unsigned char* alphabet);
+                    const OpalSearchResult result, const unsigned char* alphabet);
 
 int main(int argc, char * const argv[]) {
     int gapOpen = 3;
@@ -28,7 +28,7 @@ int main(int argc, char * const argv[]) {
     char scoreMatrixFilepath[512];
     bool silent = false;
     char mode[16] = "SW";
-    int searchType = SWIMD_SEARCH_SCORE;
+    int searchType = OPAL_SEARCH_SCORE;
     int option;
     while ((option = getopt(argc, argv, "a:o:e:m:f:sp")) >= 0) {
         switch (option) {
@@ -38,12 +38,12 @@ int main(int argc, char * const argv[]) {
         case 'm': scoreMatrixName = string(optarg); break;
         case 'f': scoreMatrixFileGiven = true; strcpy(scoreMatrixFilepath, optarg); break;
         case 's': silent = true; break;
-        case 'p': searchType = SWIMD_SEARCH_ALIGNMENT; break;
+        case 'p': searchType = OPAL_SEARCH_ALIGNMENT; break;
         }
     }
     if (optind + 2 != argc) {
         fprintf(stderr, "\n");
-        fprintf(stderr, "Usage: swimd_aligner [options...] <query.fasta> <db.fasta>\n");
+        fprintf(stderr, "Usage: opal_aligner [options...] <query.fasta> <db.fasta>\n");
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "  -g N  N is gap opening penalty. [default: 3]\n");
         fprintf(stderr, "  -e N  N is gap extension penalty. [default: 1]\n"
@@ -76,13 +76,13 @@ int main(int argc, char * const argv[]) {
     // Detect mode
     int modeCode;
     if (!strcmp(mode, "SW"))
-        modeCode = SWIMD_MODE_SW;
+        modeCode = OPAL_MODE_SW;
     else if (!strcmp(mode, "HW"))
-        modeCode = SWIMD_MODE_HW;
+        modeCode = OPAL_MODE_HW;
     else if (!strcmp(mode, "NW"))
-        modeCode = SWIMD_MODE_NW;
+        modeCode = OPAL_MODE_NW;
     else if (!strcmp(mode, "OV"))
-        modeCode = SWIMD_MODE_OV;
+        modeCode = OPAL_MODE_OV;
     else {
         printf("Invalid mode!\n");
         return 1;
@@ -138,17 +138,17 @@ int main(int argc, char * const argv[]) {
         printf("Read %d database sequences, %d residues total.\n", dbLength, dbNumResidues);
 
         // ----------------------------- MAIN CALCULATION ----------------------------- //
-        SwimdSearchResult** results = new SwimdSearchResult*[dbLength];
+        OpalSearchResult** results = new OpalSearchResult*[dbLength];
         for (int i = 0; i < dbLength; i++) {
-            results[i] = new SwimdSearchResult;
-            swimdInitSearchResult(results[i]);
+            results[i] = new OpalSearchResult;
+            opalInitSearchResult(results[i]);
         }
         printf("\nComparing query to database...");
         fflush(stdout);
         clock_t start = clock();
-        int resultCode = swimdSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
+        int resultCode = opalSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
                                              gapOpen, gapExt, scoreMatrix.getMatrix(), alphabetLength,
-                                             results, searchType, modeCode, SWIMD_OVERFLOW_BUCKETS);
+                                             results, searchType, modeCode, OPAL_OVERFLOW_BUCKETS);
         if (resultCode) {
             printf("\nDatabase search failed with error code: %d\n", resultCode);
         }
@@ -293,14 +293,14 @@ bool readFastaSequences(FILE* &file, unsigned char* alphabet, int alphabetLength
 
 void printAlignment(const unsigned char* query, const int queryLength,
                     const unsigned char* target, const int targetLength,
-                    const SwimdSearchResult result, const unsigned char* alphabet) {
+                    const OpalSearchResult result, const unsigned char* alphabet) {
     int tIdx = result.startLocationTarget;
     int qIdx = result.startLocationQuery;
     /* What is this for?
       if (modeCode == EDLIB_MODE_HW) {
         tIdx = position;
         for (int i = 0; i < alignmentLength; i++) {
-            if (alignment[i] != SWIMD_ALIGN_DEL)
+            if (alignment[i] != OPAL_ALIGN_DEL)
                 tIdx--;
         }
       }
@@ -310,7 +310,7 @@ void printAlignment(const unsigned char* query, const int queryLength,
         printf("T: ");
         int startTIdx = tIdx;
         for (int j = start; j < start + 50 && j < result.alignmentLength; j++) {
-            if (result.alignment[j] == SWIMD_ALIGN_DEL)
+            if (result.alignment[j] == OPAL_ALIGN_DEL)
                 printf("_");
             else
                 printf("%c", alphabet[target[tIdx++]]);
@@ -320,7 +320,7 @@ void printAlignment(const unsigned char* query, const int queryLength,
         printf("Q: ");
         int startQIdx = qIdx;
         for (int j = start; j < start + 50 && j < result.alignmentLength; j++) {
-            if (result.alignment[j] == SWIMD_ALIGN_INS)
+            if (result.alignment[j] == OPAL_ALIGN_INS)
                 printf("_");
             else
                 printf("%c", alphabet[query[qIdx++]]);
