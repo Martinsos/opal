@@ -575,6 +575,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
     static const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     static const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
     // Used to represent -inf. Must be larger then lower bound to avoid overflow.
+    // TOOD(martin): Is it enough to use gapExt here? Should I use gapOpen instead?
     static const typename SIMD::type LOWER_SCORE_BOUND = LOWER_BOUND + gapExt;
 
     bool overflowOccured = false;  // True if oveflow was detected at least once.
@@ -990,6 +991,165 @@ static int searchDatabase(unsigned char query[], int queryLength,
 
 
 /**
+ * @return Zero-based index of max element in array. If there are multiple elements with
+ *     same value, last is returned.
+ */
+template <typename T>
+static inline T arrayMax(T array[], int length) {
+    assert(length > 0);
+    int maxElementIdx = 0;
+    for (int i = 1; i < length; i++) {
+        if (array[i] > array[maxElementIdx]) {
+            maxElementIdx = i;
+        }
+    }
+    return array[maxElementIdx];
+}
+
+/**
+ * @param length  Length of gap, must be non-negative.
+ * @param gapOpen  Penalty for gap opening (non-negative).
+ * @param gapExt  Penalty for gap extension (non-negative).
+ * @return Gap penalty, as non-negative number.
+ */
+static int gapPenalty(int length, int gapOpen, int gapExt) {
+    if (length > 0) {
+        return gapOpen + gapExt * (length - 1);
+    } else {
+        return 0;
+    }
+}
+
+/**
+ * Calculates bottom border of band for OV mode stop conditions.
+ */
+static int calculateBottomBandBorderOV(int k, int Q, int T, int Go, int Ge, int M) {
+    int border = 0;
+
+    // for d <= Q - T:
+    border = std::max(border, std::min(Q - T, -1 * (k + Go - Ge - M * T) / Ge));
+
+    // for d > Q - T:
+    int borderCandidate = -1 * (k - M * Q + Go - Ge) / (Ge + M);
+    if (borderCandidate > Q - T) {
+        border = std::max(border, borderCandidate);
+    }
+
+    return std::min(border, Q - 1);
+}
+
+static int calculateTopBandBorderHW(int k, int Q, int T, int Go, int Ge, int M) {
+    int border = 0;
+
+    // for d <= T - Q;
+    border = std::max(border, std::min(T - Q, -1 * (k - M * Q + Go) / Ge + 1));
+
+    // for d > T - Q:
+    int borderCandidate = -1 * (k - T * M + 2 * Go + Ge * (Q - T - 2)) / (2 * Ge + M);
+    if (borderCandidate > T - Q) {
+        border = std::max(border, borderCandidate);
+    }
+
+    return std::min(border, T - 1);
+}
+
+static int calculateBottomBandBorderHW(int k, int Q, int T, int Go, int Ge, int M) {
+    int border = 0;
+
+    // for d >= Q - T:
+    int borderCandidate = -1 * (k + Go - Ge - Q * M) / (Ge + M);
+    if (borderCandidate >= Q - T) {
+        border = std::max(border, borderCandidate);
+    }
+
+    // for d < Q - T:
+    if (-2 * Go - Ge * (Q - T - 2) + M * T >= k) {
+        border = std::max(border, Q - T - 1);
+    }
+
+    return std::min(border, Q - 1);
+}
+
+static int calculateBottomBandBorderNW(int k, int Q, int T, int Go, int Ge, int M) {
+    int border = 0;
+
+    // for d > Q - T:
+    int borderCandidate = -1 * (k + 2 * Go - M * Q + Ge * (T - Q - 2)) / (2 * Ge + M);
+    if (borderCandidate > Q - T) {
+        border = std::max(border, borderCandidate);
+    }
+
+    // for d = Q - T:
+    if (Q - T <= -1 * (k + Go - M * T - Ge) / Ge) {
+        border = std::max(border, Q - T);
+    }
+
+    // for d < Q - T:
+    if (-2 * Go - Ge * (Q - T - 2) + M * T >= k) {
+        border = std::max(border, Q - T - 1);
+    }
+
+    return std::min(border, Q - 1);
+}
+
+/**
+ * Calculates top and bottom diagonal of band that contains all cells that could be part of any
+ * solution that gives score not smaller than k. This means that if we are interested only in solutions
+ * that give score that is not smaller than k, it is enough to calculate only cells inside that band.
+ * Always starts from top left corner (like NW does) no matter which mode is specified,
+ * and stops with regard to stop conditions of specified mode.
+ * @param k  We are interested only in scores thar are not smaller than k.
+ * @param mode  Alignment mode, it is used for stop conditions.
+ * @param Q  queryLength
+ * @param T  targetLength
+ * @param Go  gapOpen -> non negative penalty for opening of gap.
+ * @param Ge  gapExt -> non negative penalty for extension of gap.
+ * @param M  Max score from score matrix.
+ * @return Pair where first is index of bottom diagonal(border), and second is index of top diagonal(border).
+ *     Therefore, first value will be in [0, Q - 1], while second will be in [0, T - 1].
+ *     Band spans between top and bottom diagonal, including them.
+ *     Main diagonal has index 0, diagonals above it and below both start with index 1.
+ *     If there is no band, (-1, -1) is returned.
+ *
+ *     Example of matrix where Q is 3 and T is 6, each cell is marked with index of diagonal it lies on:
+ *
+ *          012345                                                         xxx---
+ *          101234   , if bottom border is 1 and top is 2, we have band:   xxxx--
+ *          210123                                                         -xxxx-
+ */
+static std::pair<int, int> calculateBandBorders(int k, int mode, int Q, int T, int Go, int Ge, int M) {
+    if (mode == OPAL_MODE_OV || mode == OPAL_MODE_SW) {
+        // Bands for OV and SW have same conditions, so they are calculated in same way.
+        if (M * std::min(Q, T) >= k) {  // Determine if band exists at all.
+            // Conditions for top and bottom band are symmetric, so logic for bottom is reused for top.
+            return std::make_pair(calculateBottomBandBorderOV(k, Q, T, Go, Ge, M),
+                                  calculateBottomBandBorderOV(k, T, Q, Go, Ge, M));
+        } else {
+            return std::make_pair(-1, -1);
+        }
+    } else if (mode == OPAL_MODE_HW) {
+        if (M * std::min(Q, T) - gapPenalty(Q - std::min(Q, T), Go, Ge) >= k) {
+            return std::make_pair(calculateBottomBandBorderHW(k, Q, T, Go, Ge, M),
+                                  calculateTopBandBorderHW(k, Q, T, Go, Ge, M));
+        } else {
+            return std::make_pair(-1, -1);
+        }
+    } else if (mode == OPAL_MODE_NW) {
+        if (M * std::min(Q, T) - gapPenalty(std::abs(Q - T), Go, Ge) >= k) {
+            // Conditions for top and bottom band are symmetric, so logic for bottom is reused for top.
+            return std::make_pair(calculateBottomBandBorderNW(k, Q, T, Go, Ge, M),
+                                  calculateBottomBandBorderNW(k, T, Q, Go, Ge, M));
+        } else {
+            return std::make_pair(-1, -1);
+        }
+    } else {
+        assert(false);  // Invalid alignment mode.
+    }
+}
+
+
+
+/**
  * Returns new sequence that is reverse of given sequence.
  */
 static inline unsigned char* createReverseCopy(const unsigned char* seq, int length) {
@@ -1058,9 +1218,20 @@ static void findAlignment(
     }
     printf("\n");
     */
+
+    //printf("lengths: %d %d\n", queryLength, targetLength);
+
+    std::pair<int, int> bandBorders = calculateBandBorders(
+        scoreLimit, mode, queryLength, targetLength, gapOpen, gapExt,
+        arrayMax(scoreMatrix, alphabetLength * alphabetLength));
+
+    assert(bandBorders.first >= 0 && bandBorders.first < queryLength);
+    assert(bandBorders.second >= 0 && bandBorders.second < targetLength);
+    //printf("band: %d %d\n", bandBorders.first, bandBorders.second);
+
     Cell** matrix = new Cell*[targetLength];  // NOTE: First index is column, second is row.
     Cell* initialColumn = new Cell[queryLength];
-    const int LOWER_SCORE_BOUND = INT_MIN + gapExt;
+    const int LOWER_SCORE_BOUND = INT_MIN + std::max(gapOpen, gapExt);
     for (int r = 0; r < queryLength; r++) {
         initialColumn[r].H = -1 * gapOpen - r * gapExt;
         initialColumn[r].E = LOWER_SCORE_BOUND;
@@ -1073,12 +1244,21 @@ static void findAlignment(
     for (c = 0; c < targetLength && maxScore < scoreLimit; c++) {
         matrix[c] = new Cell[queryLength];
 
-        int uF = LOWER_SCORE_BOUND;
-        int uH = -1 * gapOpen - c * gapExt;
-        int ulH = c == 0 ? 0 : uH + gapExt;
+        // First and last row in band for this column.
+        int rBandStart = std::max(0, c - bandBorders.second);
+        int rBandEnd = std::min(queryLength - 1, c + bandBorders.first);
 
-        //printf("\n");
-        for (int r = 0; r < queryLength; r++) {
+        int uF, uH, ulH;
+        if (rBandStart == 0) {
+            uF = LOWER_SCORE_BOUND;
+            uH = -1 * gapOpen - c * gapExt;
+            ulH = c == 0 ? 0 : uH + gapExt;
+        } else {
+            uH = uF = LOWER_SCORE_BOUND;  // Out of band, so set to -inf.
+            ulH = prevColumn[rBandStart - 1].H;
+        }
+
+        for (int r = rBandStart; r <= rBandEnd; r++) {
             int E = std::max(prevColumn[r].H - gapOpen, prevColumn[r].E - gapExt);
             int F = std::max(uH - gapOpen, uF - gapExt);
             int score = scoreMatrix[query[r] * alphabetLength + target[c]];
@@ -1105,6 +1285,14 @@ static void findAlignment(
             matrix[c][r].H = H;
             matrix[c][r].E = E;
             matrix[c][r].F = F;
+        }
+
+        // Set all cells that are out of band to -inf.
+        for (int r = 0; r < rBandStart; r++) {
+            matrix[c][r].E = matrix[c][r].H = matrix[c][r].F = LOWER_SCORE_BOUND;
+        }
+        for (int r = rBandEnd + 1; r < queryLength; r++) {
+            matrix[c][r].E = matrix[c][r].H = matrix[c][r].F = LOWER_SCORE_BOUND;
         }
 
         if (mode == OPAL_MODE_HW || mode == OPAL_MODE_OV) {
@@ -1210,6 +1398,7 @@ static void findAlignment(
     }
     delete[] matrix;
 }
+
 
 
 extern int opalSearchDatabase(

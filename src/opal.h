@@ -106,8 +106,8 @@ extern "C" {
      * @param [in] db Array of database sequences (each sequence is also an array).
      * @param [in] dbLength Number of database sequences.
      * @param [in] dbSeqLengths Array of lengths of database sequences.
-     * @param [in] gapOpen
-     * @param [in] gapExt
+     * @param [in] gapOpen  Non-negative penalty for gap opening.
+     * @param [in] gapExt  Non-negative penalty for gap extension.
      * @param [in] scoreMatrix Matrix of dimensions (alphabetLength, alphabetLength).
      *     It is array of length alphabetLength * alphabetLength, where memory is organized
      *     row by row: row0row1row2...rowN.

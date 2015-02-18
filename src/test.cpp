@@ -95,8 +95,8 @@ int main(int argc, char * const argv[]) {
         return 1;
     }
     resultCode = opalSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths,
-                                     gapOpen, gapExt, scoreMatrix, alphabetLength, results,
-                                     OPAL_SEARCH_ALIGNMENT, modeCode, OPAL_OVERFLOW_SIMPLE);
+                                    gapOpen, gapExt, scoreMatrix, alphabetLength, results,
+                                    OPAL_SEARCH_ALIGNMENT, modeCode, OPAL_OVERFLOW_SIMPLE);
     finish = clock();
     double time1 = ((double)(finish-start)) / CLOCKS_PER_SEC;
 
