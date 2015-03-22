@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+# If first argument is "alignment", do alignment.
+
+OPAL=../src/opal_aligner
+PROTEIN_DATA=~/Dropbox/Mile/SIMD_alignment/test_data/protein_data
+FLOAT_REGEX='[0-9]\+\.[0-9]\+'
+
+ALIGN=""
+if [ "$1" == "alignment" ]
+then
+    ALIGN="-p"
+fi
+
+for MODE in SW NW HW OV
+do
+    echo "$MODE --------------------"
+    for QUERY_NAME in O74807 P19930 Q3ZAI3 P18080
+    do
+        QUERY=$PROTEIN_DATA/$QUERY_NAME.fasta
+        TIME=`$OPAL $ALIGN -a $MODE -s $QUERY $PROTEIN_DATA/uniprot_sprot125098.fasta \
+            | grep 'Cpu time of searching:' | grep -oe $FLOAT_REGEX`
+        echo "  $QUERY_NAME: ${TIME}s"
+    done
+done

@@ -12,5 +12,5 @@
 *.la
 *.a
 
-test
-opal_aligner
+src/test
+src/opal_aligner
