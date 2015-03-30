@@ -4,7 +4,7 @@ CXXFLAGS = -std=c++11 -march=native -Wall
 
 DEBUG ?= 0
 ifeq ($(DEBUG), 1)
-	CXXFLAGS += -g
+	CXXFLAGS += -g -fno-omit-frame-pointer
 else
 	CXXFLAGS += -O3
 endif
