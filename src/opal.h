@@ -29,8 +29,9 @@ extern "C" {
 #define OPAL_OVERFLOW_BUCKETS 1
 
 // Search types
-#define OPAL_SEARCH_SCORE 0 //!< Search finds score and end location of alignment.
-#define OPAL_SEARCH_ALIGNMENT 1 //!< Search finds score, start and end location of alignment and alignment.
+#define OPAL_SEARCH_SCORE 0 //!< Search finds only score -> it is the fastest search.
+#define OPAL_SEARCH_SCORE_END 1 //!< Search finds score and end location of alignment.
+#define OPAL_SEARCH_ALIGNMENT 2 //!< Search finds score, start and end location of alignment and alignment.
 
 // Alignment operations
 #define OPAL_ALIGN_MATCH 0  //!< Match.
@@ -120,7 +121,8 @@ extern "C" {
      *     to find alignment (that way you can reuse previous result).
      *     If you provide score and end location that are incorrect, behavior is undefined.
      * @param [in] searchType Defines what type of search will be conducted.
-     *     OPAL_SEARCH_SCORE: find score and end location.
+     *     OPAL_SEARCH_SCORE: find score.
+     *     OPAL_SEARCH_SCORE_END: find score and end location.
      *     OPAL_SEARCH_ALIGNMENT: find score, end location, start location and alignment.
      *       Finding of alignment takes significant amount of time and memory.
      * @param [in] mode Mode of alignment, different mode means different algorithm.
@@ -149,7 +151,7 @@ extern "C" {
         unsigned char query[], int queryLength, unsigned char* db[], int dbLength,
         int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
         int alphabetLength, OpalSearchResult* results[],
-        int searchType, int mode, int overflowMethod);
+        const int searchType, int mode, int overflowMethod);
 
     /**
      * Same like opalSearchDatabase, with few small differences:

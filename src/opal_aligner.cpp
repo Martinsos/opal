@@ -30,7 +30,7 @@ int main(int argc, char * const argv[]) {
     char mode[16] = "SW";
     int searchType = OPAL_SEARCH_SCORE;
     int option;
-    while ((option = getopt(argc, argv, "a:o:e:m:f:sp")) >= 0) {
+    while ((option = getopt(argc, argv, "a:o:e:m:f:x:s")) >= 0) {
         switch (option) {
         case 'a': strcpy(mode, optarg); break;
         case 'o': gapOpen = atoi(optarg); break;
@@ -38,7 +38,7 @@ int main(int argc, char * const argv[]) {
         case 'm': scoreMatrixName = string(optarg); break;
         case 'f': scoreMatrixFileGiven = true; strcpy(scoreMatrixFilepath, optarg); break;
         case 's': silent = true; break;
-        case 'p': searchType = OPAL_SEARCH_ALIGNMENT; break;
+        case 'x': searchType = atoi(optarg); break;
         }
     }
     if (optind + 2 != argc) {
@@ -52,7 +52,12 @@ int main(int argc, char * const argv[]) {
         fprintf(stderr, "  -f FILE  FILE contains score matrix and some additional data. Overrides -m.\n");
         fprintf(stderr, "  -s  If set, there will be no score output (silent mode).\n");
         fprintf(stderr, "  -a SW|NW|HW|OV  Alignment mode that will be used. [default: SW]\n");
-        fprintf(stderr, "  -p  If set, alignment is found and printed.\n");
+        fprintf(stderr,
+                "  -x search_level  Following search levels are available [default: %d]:\n"
+                "    %d - score\n"
+                "    %d - score, end location\n"
+                "    %d - score, end and start location and alignment\n",
+                OPAL_SEARCH_SCORE, OPAL_SEARCH_SCORE, OPAL_SEARCH_SCORE_END, OPAL_SEARCH_ALIGNMENT);
         return 1;
     }
     //-------------------------------------------------------------------------//

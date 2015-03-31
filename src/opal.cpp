@@ -159,7 +159,8 @@ template<class SIMD>
 static int searchDatabaseSW_(unsigned char query[], int queryLength,
                              unsigned char** db, int dbLength, int dbSeqLengths[],
                              int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                             OpalSearchResult* results[], bool calculated[], int overflowMethod) {
+                             OpalSearchResult* results[], const int searchType, bool calculated[],
+                             int overflowMethod) {
 
     const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -291,11 +292,14 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             if (!SIMD::satArthm)
                 ofTest = SIMD::min(ofTest, ulH_P);
 
-            // We remember rows that had max scores, in order to find out the row of best score.
-            rowsWithImprovement[rowsWithImprovementLength] = r;
-            // TODO(martin): simdIsAllZeroes seems to bring significant slowdown, but I could
-            // not find way to avoid it.
-            rowsWithImprovementLength += 1 - simdIsAllZeroes(SIMD::cmpgt(H, maxH));
+            // If we need end location, remember row with best score.
+            if (searchType != OPAL_SEARCH_SCORE) {
+                // We remember rows that had max scores, in order to find out the row of best score.
+                rowsWithImprovement[rowsWithImprovementLength] = r;
+                // TODO(martin): simdIsAllZeroes seems to bring significant slowdown, but I could
+                // not find way to avoid it.
+                rowsWithImprovementLength += 1 - simdIsAllZeroes(SIMD::cmpgt(H, maxH));
+            }
 
             maxH = SIMD::max(maxH, H); // update best score
 
@@ -358,17 +362,19 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         // ---------------------------------------------------------------------- //
 
         // --------- Update end location of alignment ----------- //
-        for (int i = 0; i < rowsWithImprovementLength; i++) {
-            int r = rowsWithImprovement[i];
-            typename SIMD::type unpackedH[SIMD::numSeqs];
-            _mmxxx_store_si((__mxxxi*)unpackedH, prevHs[r]);
-            for (int j = 0; j < SIMD::numSeqs; j++) {
-                if (currDbSeqsPos[j] != 0 && !overflowed[j]) {  // If not null sequence or overflowed
-                    if (unpackedH[j] > currDbSeqsBestScore[j]) {
-                        currDbSeqsBestScore[j] = unpackedH[j];
-                        currDbSeqsBestScoreRow[j] = r;
-                        currDbSeqsBestScoreColumn[j] = dbSeqLengths[currDbSeqsIdxs[j]] - currDbSeqsLengths[j]
-                            + columnsSinceLastSeqEnd - 1;
+        if (searchType != OPAL_SEARCH_SCORE) {
+            for (int i = 0; i < rowsWithImprovementLength; i++) {
+                int r = rowsWithImprovement[i];
+                typename SIMD::type unpackedH[SIMD::numSeqs];
+                _mmxxx_store_si((__mxxxi*)unpackedH, prevHs[r]);
+                for (int j = 0; j < SIMD::numSeqs; j++) {
+                    if (currDbSeqsPos[j] != 0 && !overflowed[j]) {  // If not null sequence or overflowedresult->endLocationQuery =
+                        if (unpackedH[j] > currDbSeqsBestScore[j]) {
+                            currDbSeqsBestScore[j] = unpackedH[j];
+                            currDbSeqsBestScoreRow[j] = r;
+                            currDbSeqsBestScoreColumn[j] = dbSeqLengths[currDbSeqsIdxs[j]] - currDbSeqsLengths[j]
+                                + columnsSinceLastSeqEnd - 1;
+                        }
                     }
                 }
             }
@@ -388,12 +394,17 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                         if (!overflowed[i]) {
                             // Save score and mark as calculated
                             calculated[currDbSeqsIdxs[i]] = true;
-                            opalSearchResultSetScore(results[currDbSeqsIdxs[i]], currDbSeqsBestScore[i]);
+                            opalSearchResultSetScore(results[currDbSeqsIdxs[i]], unpackedMaxH[i]);
                             if (SIMD::negRange) {
                                 results[currDbSeqsIdxs[i]]->score -= LOWER_BOUND;
                             }
-                            results[currDbSeqsIdxs[i]]->endLocationQuery = currDbSeqsBestScoreRow[i];
-                            results[currDbSeqsIdxs[i]]->endLocationTarget = currDbSeqsBestScoreColumn[i];
+                            if (searchType != OPAL_SEARCH_SCORE) {
+                                results[currDbSeqsIdxs[i]]->endLocationQuery = currDbSeqsBestScoreRow[i];
+                                results[currDbSeqsIdxs[i]]->endLocationTarget = currDbSeqsBestScoreColumn[i];
+                            } else {
+                                results[currDbSeqsIdxs[i]]->endLocationQuery = -1;
+                                results[currDbSeqsIdxs[i]]->endLocationTarget = -1;
+                            }
                         }
                         currDbSeqsBestScore[i] = LOWER_BOUND;
                         // Load next sequence
@@ -471,7 +482,7 @@ static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDb
 static int searchDatabaseSW(unsigned char query[], int queryLength,
                             unsigned char** db, int dbLength, int dbSeqLengths[],
                             int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                            OpalSearchResult* results[], bool skip[], int overflowMethod) {
+                            OpalSearchResult* results[], const int searchType, bool skip[], int overflowMethod) {
     int resultCode = 0;
     // Do buckets only if using buckets overflow method.
     const int chunkSize = overflowMethod == OPAL_OVERFLOW_BUCKETS ? 1024 : dbLength;
@@ -487,18 +498,18 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
         resultCode = searchDatabaseSW_< SimdSW<char> >(
             query, queryLength, db_, dbLength_, dbSeqLengths_,
             gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
-            calculated, overflowMethod);
+            searchType, calculated, overflowMethod);
         if (resultCode == OPAL_ERR_OVERFLOW) {
             resultCode = searchDatabaseSW_< SimdSW<short> >(
                 query, queryLength, db_, dbLength_, dbSeqLengths_,
                 gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
-                calculated, overflowMethod);
+                searchType, calculated, overflowMethod);
             if (resultCode == OPAL_ERR_OVERFLOW) {
                 resultCode = searchDatabaseSW_< SimdSW<int> >(
                     query, queryLength,
                     db_, dbLength_, dbSeqLengths_,
                     gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
-                    calculated, overflowMethod);
+                    searchType, calculated, overflowMethod);
                 if (resultCode != 0)
                     break;
             }
@@ -570,7 +581,7 @@ template<class SIMD, int MODE>
 static int searchDatabase_(unsigned char query[], int queryLength,
                            unsigned char** db, int dbLength, int dbSeqLengths[],
                            int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                           OpalSearchResult* results[], bool calculated[], int overflowMethod) {
+                           OpalSearchResult* results[], const int searchType, bool calculated[], int overflowMethod) {
 
     static const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
     static const typename SIMD::type UPPER_BOUND = std::numeric_limits<typename SIMD::type>::max();
@@ -793,7 +804,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         // ---------------------------------------------------------------------- //
 
         // ------------------ Store end location of best score ------------------ //
-        if (MODE == OPAL_MODE_HW || MODE == OPAL_MODE_OV) {
+        if (searchType != OPAL_SEARCH_SCORE && (MODE == OPAL_MODE_HW || MODE == OPAL_MODE_OV)) {
             // Determine the column of best score.
             __mxxxi greater = SIMD::cmpgt(maxLastRowH, prevMaxLastRowH);
             typename SIMD::type unpackedGreater[SIMD::numSeqs];
@@ -840,36 +851,41 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                             // Set score.
                             opalSearchResultSetScore(result, unpackedBestScore[i]);
                             // Set end location.
-                            if (MODE == OPAL_MODE_NW) {
-                                result->endLocationQuery = queryLength - 1;
-                                result->endLocationTarget = dbSeqLengths[dbSeqIdx] - 1;
-                            }
-                            if (MODE == OPAL_MODE_HW) {
-                                result->endLocationQuery = queryLength - 1;
-                                result->endLocationTarget = currDbSeqsBestScoreColumn[i];
-                            }
-                            if (MODE == OPAL_MODE_OV) {
-                                // This unpacking will repeat unnecessarily if there are multiple sequences
-                                // ending at the same time, however that will happen in very rare occasions.
-                                // TODO(martin): always unpack only once.
-                                typename SIMD::type unpackedPrevMaxLastRowH[SIMD::numSeqs];
-                                _mmxxx_store_si((__mxxxi*)unpackedPrevMaxLastRowH, prevMaxLastRowH);
-                                typename SIMD::type maxScore = unpackedPrevMaxLastRowH[i];
-
-                                // If last column contains best score, determine row.
-                                if (unpackedMaxH[i] > maxScore) {
-                                    result->endLocationTarget = dbSeqLengths[dbSeqIdx] - 1;
-                                    for (int r = 0; r < queryLength; r++) {
-                                        typename SIMD::type unpackedPrevH[SIMD::numSeqs];
-                                        _mmxxx_store_si((__mxxxi*)unpackedPrevH, prevHs[r]);
-                                        if (unpackedPrevH[i] > maxScore) {
-                                            result->endLocationQuery = r;
-                                            maxScore = unpackedPrevH[i];
-                                        }
-                                    }
-                                } else {
-                                    result->endLocationTarget = currDbSeqsBestScoreColumn[i];
+                            if (searchType == OPAL_SEARCH_SCORE) {
+                                result->endLocationQuery = -1;
+                                result->endLocationTarget = -1;
+                            } else {
+                                if (MODE == OPAL_MODE_NW) {
                                     result->endLocationQuery = queryLength - 1;
+                                    result->endLocationTarget = dbSeqLengths[dbSeqIdx] - 1;
+                                }
+                                if (MODE == OPAL_MODE_HW) {
+                                    result->endLocationQuery = queryLength - 1;
+                                    result->endLocationTarget = currDbSeqsBestScoreColumn[i];
+                                }
+                                if (MODE == OPAL_MODE_OV) {
+                                    // This unpacking will repeat unnecessarily if there are multiple sequences
+                                    // ending at the same time, however that will happen in very rare occasions.
+                                    // TODO(martin): always unpack only once.
+                                    typename SIMD::type unpackedPrevMaxLastRowH[SIMD::numSeqs];
+                                    _mmxxx_store_si((__mxxxi*)unpackedPrevMaxLastRowH, prevMaxLastRowH);
+                                    typename SIMD::type maxScore = unpackedPrevMaxLastRowH[i];
+
+                                    // If last column contains best score, determine row.
+                                    if (unpackedMaxH[i] > maxScore) {
+                                        result->endLocationTarget = dbSeqLengths[dbSeqIdx] - 1;
+                                        for (int r = 0; r < queryLength; r++) {
+                                            typename SIMD::type unpackedPrevH[SIMD::numSeqs];
+                                            _mmxxx_store_si((__mxxxi*)unpackedPrevH, prevHs[r]);
+                                            if (unpackedPrevH[i] > maxScore) {
+                                                result->endLocationQuery = r;
+                                                maxScore = unpackedPrevH[i];
+                                            }
+                                        }
+                                    } else {
+                                        result->endLocationTarget = currDbSeqsBestScoreColumn[i];
+                                        result->endLocationQuery = queryLength - 1;
+                                    }
                                 }
                             }
                         }
@@ -953,7 +969,7 @@ template <int MODE>
 static int searchDatabase(unsigned char query[], int queryLength,
                           unsigned char** db, int dbLength, int dbSeqLengths[],
                           int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-                          OpalSearchResult* results[], bool skip[], int overflowMethod) {
+                          OpalSearchResult* results[], const int searchType, bool skip[], int overflowMethod) {
     int resultCode = 0;
     // Do buckets only if using buckets overflow method.
     const int chunkSize = overflowMethod == OPAL_OVERFLOW_BUCKETS ? 1024 : dbLength;
@@ -969,17 +985,17 @@ static int searchDatabase(unsigned char query[], int queryLength,
         resultCode = searchDatabase_< Simd<char>, MODE >
             (query, queryLength, db_, dbLength_, dbSeqLengths_,
              gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
-             calculated, overflowMethod);
+             searchType, calculated, overflowMethod);
         if (resultCode == OPAL_ERR_OVERFLOW) {
             resultCode = searchDatabase_< Simd<short>, MODE >
                 (query, queryLength, db_, dbLength_, dbSeqLengths_,
                  gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
-                 calculated, overflowMethod);
+                 searchType, calculated, overflowMethod);
             if (resultCode == OPAL_ERR_OVERFLOW) {
                 resultCode = searchDatabase_< Simd<int>, MODE >
                     (query, queryLength, db_, dbLength_, dbSeqLengths_,
                      gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
-                     calculated, overflowMethod);
+                     searchType, calculated, overflowMethod);
                 if (resultCode != 0)
                     break; // TODO: this does not make much sense because of buckets, improve it.
             }
@@ -1405,35 +1421,36 @@ extern int opalSearchDatabase(
     unsigned char query[], int queryLength,
     unsigned char** db, int dbLength, int dbSeqLengths[],
     int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
-    OpalSearchResult* results[], int searchType, int mode, int overflowMethod) {
+    OpalSearchResult* results[], const int searchType, int mode, int overflowMethod) {
 #if !defined(__SSE4_1__) && !defined(__AVX2__)
     return OPAL_ERR_NO_SIMD_SUPPORT;
 #else
     // Calculate score and end location.
     int status;
-    // Skip recalculation of sequences that already have score and end location.
+    // Skip recalculation of already calculated sequences.
     bool *skip = new bool[dbLength];
     for (int i = 0; i < dbLength; i++) {
-        skip[i] = (!opalSearchResultIsEmpty(*results[i]) && results[i]->endLocationQuery >= 0
-                   && results[i]->endLocationTarget >= 0);
+        skip[i] = (!opalSearchResultIsEmpty(*results[i])
+                   && (searchType == OPAL_SEARCH_SCORE
+                       || (results[i]->endLocationQuery >= 0 && results[i]->endLocationTarget >= 0)));
     }
     if (mode == OPAL_MODE_NW) {
         status = searchDatabase<OPAL_MODE_NW>(
             query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
-            scoreMatrix, alphabetLength, results, skip, overflowMethod);
+            scoreMatrix, alphabetLength, results, searchType, skip, overflowMethod);
     } else if (mode == OPAL_MODE_HW) {
         status = searchDatabase<OPAL_MODE_HW>(
             query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
-            scoreMatrix, alphabetLength, results, skip, overflowMethod);
+            scoreMatrix, alphabetLength, results, searchType, skip, overflowMethod);
     } else if (mode == OPAL_MODE_OV) {
         status = searchDatabase<OPAL_MODE_OV>(
             query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
-            scoreMatrix, alphabetLength, results, skip, overflowMethod);
+            scoreMatrix, alphabetLength, results, searchType, skip, overflowMethod);
     } else if (mode == OPAL_MODE_SW) {
         status = searchDatabaseSW(
             query, queryLength, db, dbLength, dbSeqLengths,
             gapOpen, gapExt, scoreMatrix, alphabetLength,
-            results, skip, overflowMethod);
+            results, searchType, skip, overflowMethod);
     } else {
         status = OPAL_ERR_INVALID_MODE;
     }
@@ -1500,7 +1517,7 @@ extern int opalSearchDatabaseCharSW(
     }
     int resultCode = searchDatabaseSW_< SimdSW<char> >(
         query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
-        scoreMatrix, alphabetLength, results, calculated,
+        scoreMatrix, alphabetLength, results, OPAL_SEARCH_SCORE, calculated,
         OPAL_OVERFLOW_SIMPLE);
     for (int i = 0; i < dbLength; i++) {
         if (!calculated[i]) {
