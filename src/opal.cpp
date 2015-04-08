@@ -332,8 +332,11 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             typename SIMD::type unpackedOfTest[SIMD::numSeqs];
             _mmxxx_store_si((__mxxxi*)unpackedOfTest, ofTest);
             for (int i = 0; i < SIMD::numSeqs; i++) {
-                overflowed[i] = currDbSeqsPos[i] != 0 &&
-                    unpackedOfTest[i] <= LOWER_BOUND / 2;
+                overflowed[i] = currDbSeqsPos[i] != 0 && unpackedOfTest[i] <= LOWER_BOUND / 2;
+                if (overflowMethod == OPAL_OVERFLOW_BUCKETS && overflowed[i]) {
+                    // In buckets method, we stop calculation when overflow is detected.
+                    return OPAL_ERR_OVERFLOW;
+                }
             }
         } else {
             if (SIMD::negRange) {
@@ -342,12 +345,17 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 _mmxxx_store_si((__mxxxi*)unpackedOfTest, ofTest);
                 for (int i = 0; i < SIMD::numSeqs; i++) {
                     overflowed[i] = currDbSeqsPos[i] != 0 && unpackedOfTest[i] >= 0;
+                    if (overflowMethod == OPAL_OVERFLOW_BUCKETS && overflowed[i]) {
+                        return OPAL_ERR_OVERFLOW;
+                    }
                 }
             } else {
                 // I check if upper bound is reached
                 for (int i = 0; i < SIMD::numSeqs; i++) {
-                    overflowed[i] = currDbSeqsPos[i] != 0 &&
-                        unpackedMaxH[i] == UPPER_BOUND;
+                    overflowed[i] = currDbSeqsPos[i] != 0 && unpackedMaxH[i] == UPPER_BOUND;
+                    if (overflowMethod == OPAL_OVERFLOW_BUCKETS && overflowed[i]) {
+                        return OPAL_ERR_OVERFLOW;
+                    }
                 }
             }
         }
@@ -355,10 +363,6 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             overflowDetected = overflowDetected || overflowed[i];
         }
         overflowOccured = overflowOccured || overflowDetected;
-        // In buckets method, we stop calculation when overflow is detected.
-        if (overflowMethod == OPAL_OVERFLOW_BUCKETS && overflowDetected) {
-            return OPAL_ERR_OVERFLOW;
-        }
         // ---------------------------------------------------------------------- //
 
         // --------- Update end location of alignment ----------- //
@@ -790,17 +794,18 @@ static int searchDatabase_(unsigned char query[], int queryLength,
             typename SIMD::type unpackedMinEF[SIMD::numSeqs];
             _mmxxx_store_si((__mxxxi*)unpackedMinEF, minEF);
             for (int i = 0; i < SIMD::numSeqs; i++) {
-                overflowed[i] = currDbSeqsPos[i] != 0 && (unpackedMinEF[i] == LOWER_BOUND || unpackedMaxH[i] == UPPER_BOUND);
+                overflowed[i] = currDbSeqsPos[i] != 0 && (unpackedMinEF[i] == LOWER_BOUND
+                                                          || unpackedMaxH[i] == UPPER_BOUND);
+                if (overflowMethod == OPAL_OVERFLOW_BUCKETS && overflowed[i]) {
+                    // In buckets method, we stop calculation when overflow is detected.
+                    return OPAL_ERR_OVERFLOW;
+                }
             }
         }
         for (int i = 0; i < SIMD::numSeqs; i++) {
             overflowDetected = overflowDetected || overflowed[i];
         }
         overflowOccured = overflowOccured || overflowDetected;
-        // In buckets method, we stop calculation when overflow is detected.
-        if (overflowMethod == OPAL_OVERFLOW_BUCKETS && overflowDetected) {
-            return OPAL_ERR_OVERFLOW;
-        }
         // ---------------------------------------------------------------------- //
 
         // ------------------ Store end location of best score ------------------ //
