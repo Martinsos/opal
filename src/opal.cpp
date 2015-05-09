@@ -153,6 +153,12 @@ void print_mmxxxi(__mxxxi mm) {
         printf("%d ", unpacked[i]);
 }
 
+// This structure represents cell in dynamic programming matrix, but only with E and H values.
+struct CellEH {
+    __mxxxi H;
+    __mxxxi E;
+};
+
 /**
  * @param stopOnOverflow  If true, function will stop when first overflow happens.
  *            If false, function will not stop but continue with next sequence.
@@ -204,6 +210,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     else
         scoreZeroes = zeroes;
 
+    // TODO: this arrays do not go over 64 bytes: align them to 64 bytes, so they use only one cache line?
     int numEndedDbSeqs = 0; // Number of sequences that ended
     int nextDbSeqIdx = 0;  // index in db
     // Index in db. -1 for null sequence (null sequence == no sequence).
@@ -223,10 +230,14 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++) {
         currDbSeqsBestScore[i] = LOWER_BOUND;
-        if (loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
-                             currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs)) {
-        }
+        loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
+                         currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs);
     }
+
+    // Temporary query profile.
+    __mxxxi P[alphabetLength];
+    // Helper array, used to build query profile (P).
+    typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
 
     // Q is gap open penalty, R is gap ext penalty.
     __mxxxi Q = SIMD::set1(gapOpen);
@@ -234,12 +245,11 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
     int rowsWithImprovement[queryLength];  // Indexes of rows where one of sequences improved score.
 
-    // Previous H column (array), previous E column (array), previous F, all signed short
-    __mxxxi prevHs[queryLength];
-    __mxxxi prevEs[queryLength];
+    // Previous Hs, previous Es, previous F, all signed short.
+    CellEH prevColumn[queryLength];  // Stores results of previous column in matrix.
     // Initialize all values to 0
     for (int i = 0; i < queryLength; i++) {
-        prevHs[i] = prevEs[i] = scoreZeroes;
+        prevColumn[i].H = prevColumn[i].E = scoreZeroes;
     }
 
     __mxxxi maxH = scoreZeroes;  // Best score in sequence
@@ -260,8 +270,6 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             //     Then, for that letter A, he constructs query profile row by shuffling
             //     values from those two simd vectors. I am not sure why would this be faster
             //     than what I am doing: just simply constructing and loading.
-            __mxxxi P[alphabetLength];
-            typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(16)));
             for (unsigned char letter = 0; letter < alphabetLength; letter++) {
                 int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
                 for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
@@ -283,7 +291,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
             for (int r = 0; r < queryLength; r++) { // For each cell in column
                 // Calculate E = max(lH-Q, lE-R)
-                __mxxxi E = SIMD::max(SIMD::sub(prevHs[r], Q), SIMD::sub(prevEs[r], R));
+                __mxxxi E = SIMD::max(SIMD::sub(prevColumn[r].H, Q), SIMD::sub(prevColumn[r].E, R));
 
                 // Calculate F = max(uH-Q, uF-R)
                 __mxxxi F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R));
@@ -316,11 +324,11 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 // Set uF, uH, ulH
                 uF = F;
                 uH = H;
-                ulH = prevHs[r];
+                ulH = prevColumn[r].H;
 
                 // Update prevHs, prevEs in advance for next column
-                prevEs[r] = E;
-                prevHs[r] = H;
+                prevColumn[r].E = E;
+                prevColumn[r].H = H;
 
                 // For saturated: score is biased everywhere, but just score: E, F, H
                 // Also, all scores except ulH_P certainly have value < 0
@@ -385,7 +393,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             for (int i = 0; i < rowsWithImprovementLength; i++) {
                 int r = rowsWithImprovement[i];
                 typename SIMD::type unpackedH[SIMD::numSeqs];
-                _mmxxx_store_si((__mxxxi*)unpackedH, prevHs[r]);
+                _mmxxx_store_si((__mxxxi*)unpackedH, prevColumn[r].H);
                 for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
                     if (currDbSeqsLengths[seqIdx] >= 0 && !overflowed[seqIdx]) {  // If not null sequence or overflowed
                         if (unpackedH[seqIdx] > currDbSeqsBestScore[seqIdx]) {
@@ -411,7 +419,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
         // --------------------- CHECK AND HANDLE SEQUENCE END ------------------ //
         if (overflowDetected || sequenceEnded) {
-            typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(16)));
+            typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
 
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 if (currDbSeqsLengths[i] >= 0) { // If not null sequence
@@ -445,19 +453,19 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                     }
                 }
             }
-            // Reset prevEs, prevHs and maxH
+            // Reset prevColumn and maxH
             __mxxxi resetMaskPacked = _mmxxx_load_si((__mxxxi const*)resetMask);
             if (SIMD::negRange) {
                 for (int i = 0; i < queryLength; i++)
-                    prevEs[i] = SIMD::add(prevEs[i], resetMaskPacked);
+                    prevColumn[i].E = SIMD::add(prevColumn[i].E, resetMaskPacked);
                 for (int i = 0; i < queryLength; i++)
-                    prevHs[i] = SIMD::add(prevHs[i], resetMaskPacked);
+                    prevColumn[i].H = SIMD::add(prevColumn[i].H, resetMaskPacked);
                 maxH = SIMD::add(maxH, resetMaskPacked);
             } else {
                 for (int i = 0; i < queryLength; i++)
-                    prevEs[i] = _mmxxx_and_si(prevEs[i], resetMaskPacked);
+                    prevColumn[i].E = _mmxxx_and_si(prevColumn[i].E, resetMaskPacked);
                 for (int i = 0; i < queryLength; i++)
-                    prevHs[i] = _mmxxx_and_si(prevHs[i], resetMaskPacked);
+                    prevColumn[i].H = _mmxxx_and_si(prevColumn[i].H, resetMaskPacked);
                 maxH = _mmxxx_and_si(maxH, resetMaskPacked);
             }
         }
@@ -699,7 +707,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
         __mxxxi P[alphabetLength];
-        typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(16)));
+        typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
         for (unsigned char letter = 0; letter < alphabetLength; letter++) {
             int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
             for (int i = 0; i < SIMD::numSeqs; i++) {
@@ -717,7 +725,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         // Database sequence has fixed start and end only in NW
         if (MODE == OPAL_MODE_NW) {
             if (seqJustLoaded) {
-                typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(16)));
+                typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
                 for (int i = 0; i < SIMD::numSeqs; i++)
                     resetMask[i] = justLoaded[i] ?  0 : -1;
                 const __mxxxi resetMaskPacked = _mmxxx_load_si((__mxxxi const*)resetMask);
@@ -920,8 +928,8 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                 }
             }
             //------------ Reset prevEs, prevHs, maxLastRowH(, ulH and uH) ------------//
-            typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(16)));
-            typename SIMD::type setMask[SIMD::numSeqs] __attribute__((aligned(16))); // inverse of resetMask
+            typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+            typename SIMD::type setMask[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8))); // inverse of resetMask
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 resetMask[i] = justLoaded[i] ?  0 : -1;
                 setMask[i]   = justLoaded[i] ? -1 :  0;
