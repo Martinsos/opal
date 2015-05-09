@@ -84,6 +84,10 @@ typedef __m128i __mxxxi;
 // for end of sequence or overflow.
 #define COLS_AT_ONCE 4
 
+// Hints to compiler that value of expression is likely to be 1.
+// Useful for if-else, like this: if(likely(a > b)) hints that a is likely larger than b.
+#define likely(e) __builtin_expect(e, 1)
+
 //------------------------------------ SIMD PARAMETERS ---------------------------------//
 static inline int simdIsAllZeroes(const __mxxxi& a) {
     return _mmxxx_testz_si(a, a);
@@ -273,11 +277,11 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             for (unsigned char letter = 0; letter < alphabetLength; letter++) {
                 int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
                 for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
-                    if (currDbSeqsLengths[seqIdx] > 0) {
+                    if (likely(currDbSeqsLengths[seqIdx] > 0)) {
                         profileRow[seqIdx] = (typename SIMD::type)scoreMatrixRow[*(currDbSeqsPos[seqIdx])];
                     } else {
                         // Dummy value for finished sequences. It can not affect result.
-                        profileRow[seqIdx] = (typename SIMD::type)-1;
+                        profileRow[seqIdx] = -1;
                     }
                 }
                 P[letter] = _mmxxx_load_si((__mxxxi const*)profileRow);
@@ -344,7 +348,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             }
         }
 
-        typename SIMD::type unpackedMaxH[SIMD::numSeqs];
+        typename SIMD::type unpackedMaxH[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
         _mmxxx_store_si((__mxxxi*)unpackedMaxH, maxH);
 
         // ------------------------ OVERFLOW DETECTION -------------------------- //
@@ -353,7 +357,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             // This check is based on following assumptions:
             //  - overflow wraps
             //  - Q, R and all scores from scoreMatrix are between LOWER_BOUND/2 and UPPER_BOUND/2 exclusive
-            typename SIMD::type unpackedOfTest[SIMD::numSeqs];
+            typename SIMD::type unpackedOfTest[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
             _mmxxx_store_si((__mxxxi*)unpackedOfTest, ofTest);
             for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
                 overflowed[seqIdx] = currDbSeqsLengths[seqIdx] >= 0 && unpackedOfTest[seqIdx] <= LOWER_BOUND / 2;
@@ -365,7 +369,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         } else {
             if (SIMD::negRange) {
                 // Since I use saturation, I check if minUlH_P was non negative
-                typename SIMD::type unpackedOfTest[SIMD::numSeqs];
+                typename SIMD::type unpackedOfTest[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
                 _mmxxx_store_si((__mxxxi*)unpackedOfTest, ofTest);
                 for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
                     overflowed[seqIdx] = currDbSeqsLengths[seqIdx] >= 0 && unpackedOfTest[seqIdx] >= 0;
@@ -392,7 +396,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         if (searchType != OPAL_SEARCH_SCORE) {
             for (int i = 0; i < rowsWithImprovementLength; i++) {
                 int r = rowsWithImprovement[i];
-                typename SIMD::type unpackedH[SIMD::numSeqs];
+                typename SIMD::type unpackedH[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
                 _mmxxx_store_si((__mxxxi*)unpackedH, prevColumn[r].H);
                 for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
                     if (currDbSeqsLengths[seqIdx] >= 0 && !overflowed[seqIdx]) {  // If not null sequence or overflowed
