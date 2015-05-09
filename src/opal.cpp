@@ -240,7 +240,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     }
 
     // Temporary query profile.
-    __mxxxi P[alphabetLength];
+    __mxxxi P[COLS_AT_ONCE][alphabetLength];
     // Helper array, used to build query profile (P).
     typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
 
@@ -266,8 +266,6 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         int rowsWithImprovementLength = 0;
 
         for (int i = 0; i < COLS_AT_ONCE; i++) {
-            // TODO: move this out of for loop, and build it for all COLS_AT_ONCE columns at once.
-            //     Maybe it is better for caching.
             // -------------------- CALCULATE QUERY PROFILE ------------------------- //
             // TODO: Rognes uses pshufb here, I don't know how/why?
             // My guess: Assuming that alphabet has less than numSeqs * 2 characters,
@@ -278,17 +276,19 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             for (unsigned char letter = 0; letter < alphabetLength; letter++) {
                 int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
                 for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
-                    if (likely(currDbSeqs[seqIdx].length > 0)) {
-                        profileRow[seqIdx] = (typename SIMD::type)scoreMatrixRow[*(currDbSeqs[seqIdx].pos)];
+                    if (likely(currDbSeqs[seqIdx].length - i > 0)) {
+                        profileRow[seqIdx] = (typename SIMD::type)scoreMatrixRow[*(currDbSeqs[seqIdx].pos + i)];
                     } else {
                         // Dummy value for finished sequences. It can not affect result.
                         profileRow[seqIdx] = -1;
                     }
                 }
-                P[letter] = _mmxxx_load_si((__mxxxi const*)profileRow);
+                P[i][letter] = _mmxxx_load_si((__mxxxi const*)profileRow);
             }
             // ---------------------------------------------------------------------- //
+        }
 
+        for (int i = 0; i < COLS_AT_ONCE; i++) {
             // Previous cells: u - up, l - left, ul - up left
             __mxxxi uF, uH, ulH;
             uF = uH = ulH = scoreZeroes; // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
@@ -305,7 +305,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 __mxxxi H = SIMD::max(F, E);
                 if (!SIMD::negRange) // If not using negative range, then H could be negative at this moment so we need this
                     H = SIMD::max(H, zeroes);
-                __mxxxi ulH_P = SIMD::add(ulH, P[query[r]]); // If using negative range: if ulH_P >= 0 then we have overflow
+                __mxxxi ulH_P = SIMD::add(ulH, P[i][query[r]]); // If using negative range: if ulH_P >= 0 then we have overflow
 
                 H = SIMD::max(H, ulH_P); // If using negative range: H will always be negative, even if ulH_P overflowed
 
