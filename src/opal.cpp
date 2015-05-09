@@ -163,6 +163,13 @@ struct CellEH {
     __mxxxi E;
 };
 
+// Describes currently loaded database sequence, that is being processed.
+struct CurrentDatabaseSequence {
+    int length;  // How far from the end of sequence is current position. -1 for null sequence.
+    unsigned char* pos;  // Current position in sequence: pointer to current element. 0 for null sequence.
+    int idx;  // Index of sequence in sequence database (0-indexed). -1 for null sequence.
+};
+
 /**
  * @param stopOnOverflow  If true, function will stop when first overflow happens.
  *            If false, function will not stop but continue with next sequence.
@@ -214,15 +221,9 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     else
         scoreZeroes = zeroes;
 
-    // TODO: this arrays do not go over 64 bytes: align them to 64 bytes, so they use only one cache line?
     int numEndedDbSeqs = 0; // Number of sequences that ended
     int nextDbSeqIdx = 0;  // index in db
-    // Index in db. -1 for null sequence (null sequence == no sequence).
-    int currDbSeqsIdxs[SIMD::numSeqs];
-    // Pointer to current element for each current database sequence. 0 for null sequence.
-    unsigned char* currDbSeqsPos[SIMD::numSeqs];
-    // Lengths of remaining parts of sequences. -1 for null sequence.
-    int currDbSeqsLengths[SIMD::numSeqs];
+    CurrentDatabaseSequence currDbSeqs[SIMD::numSeqs];
 
     // Needed in order to find the most early result, which is a nice condition to have.
     int currDbSeqsBestScore[SIMD::numSeqs];
@@ -234,8 +235,8 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++) {
         currDbSeqsBestScore[i] = LOWER_BOUND;
-        loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
-                         currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs);
+        loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqs[i].idx, currDbSeqs[i].pos,
+                         currDbSeqs[i].length, db, dbSeqLengths, calculated, numEndedDbSeqs);
     }
 
     // Temporary query profile.
@@ -277,8 +278,8 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             for (unsigned char letter = 0; letter < alphabetLength; letter++) {
                 int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
                 for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
-                    if (likely(currDbSeqsLengths[seqIdx] > 0)) {
-                        profileRow[seqIdx] = (typename SIMD::type)scoreMatrixRow[*(currDbSeqsPos[seqIdx])];
+                    if (likely(currDbSeqs[seqIdx].length > 0)) {
+                        profileRow[seqIdx] = (typename SIMD::type)scoreMatrixRow[*(currDbSeqs[seqIdx].pos)];
                     } else {
                         // Dummy value for finished sequences. It can not affect result.
                         profileRow[seqIdx] = -1;
@@ -342,9 +343,9 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             // Move for one element in all sequences
             for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
                 // I do it like this to avoid using `if`.
-                bool dbSeqIsNotFinished = currDbSeqsLengths[seqIdx] > 0;
-                currDbSeqsPos[seqIdx] += dbSeqIsNotFinished;
-                currDbSeqsLengths[seqIdx] -= dbSeqIsNotFinished;
+                bool dbSeqIsNotFinished = currDbSeqs[seqIdx].length > 0;
+                currDbSeqs[seqIdx].pos += dbSeqIsNotFinished;
+                currDbSeqs[seqIdx].length -= dbSeqIsNotFinished;
             }
         }
 
@@ -360,7 +361,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             typename SIMD::type unpackedOfTest[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
             _mmxxx_store_si((__mxxxi*)unpackedOfTest, ofTest);
             for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
-                overflowed[seqIdx] = currDbSeqsLengths[seqIdx] >= 0 && unpackedOfTest[seqIdx] <= LOWER_BOUND / 2;
+                overflowed[seqIdx] = currDbSeqs[seqIdx].length >= 0 && unpackedOfTest[seqIdx] <= LOWER_BOUND / 2;
                 if (overflowMethod == OPAL_OVERFLOW_BUCKETS && overflowed[seqIdx]) {
                     // In buckets method, we stop calculation when overflow is detected.
                     return OPAL_ERR_OVERFLOW;
@@ -372,7 +373,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 typename SIMD::type unpackedOfTest[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
                 _mmxxx_store_si((__mxxxi*)unpackedOfTest, ofTest);
                 for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
-                    overflowed[seqIdx] = currDbSeqsLengths[seqIdx] >= 0 && unpackedOfTest[seqIdx] >= 0;
+                    overflowed[seqIdx] = currDbSeqs[seqIdx].length >= 0 && unpackedOfTest[seqIdx] >= 0;
                     if (overflowMethod == OPAL_OVERFLOW_BUCKETS && overflowed[seqIdx]) {
                         return OPAL_ERR_OVERFLOW;
                     }
@@ -380,7 +381,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             } else {
                 // I check if upper bound is reached
                 for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
-                    overflowed[seqIdx] = currDbSeqsLengths[seqIdx] >= 0 && unpackedMaxH[seqIdx] == UPPER_BOUND;
+                    overflowed[seqIdx] = currDbSeqs[seqIdx].length >= 0 && unpackedMaxH[seqIdx] == UPPER_BOUND;
                     if (overflowMethod == OPAL_OVERFLOW_BUCKETS && overflowed[seqIdx]) {
                         return OPAL_ERR_OVERFLOW;
                     }
@@ -399,13 +400,13 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 typename SIMD::type unpackedH[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
                 _mmxxx_store_si((__mxxxi*)unpackedH, prevColumn[r].H);
                 for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
-                    if (currDbSeqsLengths[seqIdx] >= 0 && !overflowed[seqIdx]) {  // If not null sequence or overflowed
+                    if (currDbSeqs[seqIdx].length >= 0 && !overflowed[seqIdx]) {  // If not null sequence or overflowed
                         if (unpackedH[seqIdx] > currDbSeqsBestScore[seqIdx]) {
                             currDbSeqsBestScore[seqIdx] = unpackedH[seqIdx];
                             currDbSeqsBestScoreRow[seqIdx] = r;
                             // TODO: With latest changes this line may be incorrect, I should revisit it.
-                            currDbSeqsBestScoreColumn[seqIdx] = dbSeqLengths[currDbSeqsIdxs[seqIdx]]
-                                - currDbSeqsLengths[seqIdx] - 1;
+                            currDbSeqsBestScoreColumn[seqIdx] = dbSeqLengths[currDbSeqs[seqIdx].idx]
+                                - currDbSeqs[seqIdx].length - 1;
                         }
                     }
                 }
@@ -417,7 +418,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         bool sequenceEnded = false;  // True if a sequence ended in last COLS_AT_ONCE columns.
         for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
             overflowDetected = overflowDetected || overflowed[seqIdx];
-            sequenceEnded = sequenceEnded || (currDbSeqsLengths[seqIdx] == 0);
+            sequenceEnded = sequenceEnded || (currDbSeqs[seqIdx].length == 0);
         }
         overflowOccured = overflowOccured || overflowDetected;
 
@@ -426,28 +427,28 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
 
             for (int i = 0; i < SIMD::numSeqs; i++) {
-                if (currDbSeqsLengths[i] >= 0) { // If not null sequence
-                    if (overflowed[i] || currDbSeqsLengths[i] == 0) { // If sequence ended
+                if (currDbSeqs[i].length >= 0) { // If not null sequence
+                    if (overflowed[i] || currDbSeqs[i].length == 0) { // If sequence ended
                         numEndedDbSeqs++;
                         if (!overflowed[i]) {
                             // Save score and mark as calculated
-                            calculated[currDbSeqsIdxs[i]] = true;
-                            opalSearchResultSetScore(results[currDbSeqsIdxs[i]], unpackedMaxH[i]);
+                            calculated[currDbSeqs[i].idx] = true;
+                            opalSearchResultSetScore(results[currDbSeqs[i].idx], unpackedMaxH[i]);
                             if (SIMD::negRange) {
-                                results[currDbSeqsIdxs[i]]->score -= LOWER_BOUND;
+                                results[currDbSeqs[i].idx]->score -= LOWER_BOUND;
                             }
                             if (searchType != OPAL_SEARCH_SCORE) {
-                                results[currDbSeqsIdxs[i]]->endLocationQuery = currDbSeqsBestScoreRow[i];
-                                results[currDbSeqsIdxs[i]]->endLocationTarget = currDbSeqsBestScoreColumn[i];
+                                results[currDbSeqs[i].idx]->endLocationQuery = currDbSeqsBestScoreRow[i];
+                                results[currDbSeqs[i].idx]->endLocationTarget = currDbSeqsBestScoreColumn[i];
                             } else {
-                                results[currDbSeqsIdxs[i]]->endLocationQuery = -1;
-                                results[currDbSeqsIdxs[i]]->endLocationTarget = -1;
+                                results[currDbSeqs[i].idx]->endLocationQuery = -1;
+                                results[currDbSeqs[i].idx]->endLocationTarget = -1;
                             }
                         }
                         currDbSeqsBestScore[i] = LOWER_BOUND;
                         // Load next sequence
-                        loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
-                                         currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs);
+                        loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqs[i].idx, currDbSeqs[i].pos,
+                                         currDbSeqs[i].length, db, dbSeqLengths, calculated, numEndedDbSeqs);
                         // If negative range, sets to LOWER_BOUND when used with saturated add and value < 0,
                         // otherwise sets to zero when used with and.
                         resetMask[i] = SIMD::negRange ? LOWER_BOUND : 0;
