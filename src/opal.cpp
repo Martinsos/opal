@@ -202,17 +202,20 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     // ------------------------ INITIALIZATION -------------------------- //
     __mxxxi zeroes = SIMD::set1(0);
     __mxxxi scoreZeroes; // 0 normally, but lower bound if using negative range
-    if (SIMD::negRange)
+    if (SIMD::negRange) {
         scoreZeroes = SIMD::set1(LOWER_BOUND);
-    else
+    } else {
         scoreZeroes = zeroes;
+    }
 
-    int nextDbSeqIdx = 0; // index in db
-    int currDbSeqsIdxs[SIMD::numSeqs]; // index in db
-    unsigned char* currDbSeqsPos[SIMD::numSeqs]; // current element for each current database sequence
-    int currDbSeqsLengths[SIMD::numSeqs];  // lengths of remaining parts of sequences
-    int shortestDbSeqLength = -1;  // length of shortest sequence among current database sequences
     int numEndedDbSeqs = 0; // Number of sequences that ended
+    int nextDbSeqIdx = 0;  // Index in db of next sequence that we will try to load.
+    // Index in db. -1 for null sequence (null sequence == no sequence).
+    int currDbSeqsIdxs[SIMD::numSeqs];
+    // Pointer to current element for each current database sequence. 0 for null sequence.
+    unsigned char* currDbSeqsPos[SIMD::numSeqs];
+    // Lengths of remaining parts of sequences. -1 for null sequence.
+    int currDbSeqsLengths[SIMD::numSeqs];
 
     // Needed in order to find the most early result, which is a nice condition to have.
     int currDbSeqsBestScore[SIMD::numSeqs];
@@ -228,12 +231,8 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++) {
         currDbSeqsBestScore[i] = LOWER_BOUND;
-        if (loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
-                             currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs)) {
-            // Update shortest sequence length if new sequence was loaded
-            if (shortestDbSeqLength == -1 || currDbSeqsLengths[i] < shortestDbSeqLength)
-                shortestDbSeqLength = currDbSeqsLengths[i];
-        }
+        loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
+                         currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs);
     }
 
     // Q is gap open penalty, R is gap ext penalty.
@@ -253,7 +252,6 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     // ------------------------------------------------------------------ //
 
 
-    int columnsSinceLastSeqEnd = 0;
     // For each column
     while (numEndedDbSeqs < dbLength) {
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
@@ -329,13 +327,14 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         }
         // ---------------------------------------------------------------------- //
 
-        columnsSinceLastSeqEnd++;
+        for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
+            currDbSeqsLengths[seqIdx] -= currDbSeqsLengths[seqIdx] > 0;
+        }
 
         typename SIMD::type unpackedMaxH[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
         _mmxxx_store_si((__mxxxi*)unpackedMaxH, maxH);
 
         // ------------------------ OVERFLOW DETECTION -------------------------- //
-        bool overflowDetected = false;  // True if overflow was detected for this column.
         bool overflowed[SIMD::numSeqs];
         if (!SIMD::satArthm) {
             // This check is based on following assumptions:
@@ -371,11 +370,16 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 }
             }
         }
-        for (int i = 0; i < SIMD::numSeqs; i++) {
-            overflowDetected = overflowDetected || overflowed[i];
+        // ---------------------------------------------------------------------- //
+
+        bool overflowDetected = false;  // True if overflow was detected in last column.
+        bool sequenceEnded = false;  // True if a sequence ended in last column.
+        for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
+            overflowDetected = overflowDetected || overflowed[seqIdx];
+            sequenceEnded = sequenceEnded || (currDbSeqsLengths[seqIdx] == 0);
         }
         overflowOccured = overflowOccured || overflowDetected;
-        // ---------------------------------------------------------------------- //
+
 
         // --------- Update end location of alignment ----------- //
         if (searchType != OPAL_SEARCH_SCORE) {
@@ -388,8 +392,8 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                         if (unpackedH[j] > currDbSeqsBestScore[j]) {
                             currDbSeqsBestScore[j] = unpackedH[j];
                             currDbSeqsBestScoreRow[j] = r;
-                            currDbSeqsBestScoreColumn[j] = dbSeqLengths[currDbSeqsIdxs[j]] - currDbSeqsLengths[j]
-                                + columnsSinceLastSeqEnd - 1;
+                            currDbSeqsBestScoreColumn[j] = dbSeqLengths[currDbSeqsIdxs[j]]
+                                - currDbSeqsLengths[j] - 1;
                         }
                     }
                 }
@@ -397,14 +401,13 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         }
         // ------------------------------------------------------ //
 
+
         // --------------------- CHECK AND HANDLE SEQUENCE END ------------------ //
-        if (overflowDetected || shortestDbSeqLength == columnsSinceLastSeqEnd) { // If at least one sequence ended
-            shortestDbSeqLength = -1;
+        if (overflowDetected || sequenceEnded) { // If at least one sequence ended
             typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
 
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 if (currDbSeqsPos[i] != 0) { // If not null sequence
-                    currDbSeqsLengths[i] -= columnsSinceLastSeqEnd;
                     if (overflowed[i] || currDbSeqsLengths[i] == 0) { // If sequence ended
                         numEndedDbSeqs++;
                         if (!overflowed[i]) {
@@ -435,9 +438,6 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                         if (currDbSeqsPos[i] != 0)
                             currDbSeqsPos[i]++; // If not new and not null, move for one element
                     }
-                    // Update shortest sequence length if sequence is not null
-                    if (currDbSeqsPos[i] != 0 && (shortestDbSeqLength == -1 || currDbSeqsLengths[i] < shortestDbSeqLength))
-                        shortestDbSeqLength = currDbSeqsLengths[i];
                 }
             }
             // Reset previous columns (Es and Hs) and maxH
@@ -455,12 +455,10 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 }
                 maxH = _mmxxx_and_si(maxH, resetMaskPacked);
             }
-            columnsSinceLastSeqEnd = 0;
         } else { // If no sequences ended
             // Move for one element in all sequences
             for (int i = 0; i < SIMD::numSeqs; i++)
-                if (currDbSeqsPos[i] != 0)
-                    currDbSeqsPos[i]++;
+                currDbSeqsPos[i] += (currDbSeqsPos[i] != 0);
         }
         // ---------------------------------------------------------------------- //
     }
