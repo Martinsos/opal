@@ -24,17 +24,17 @@ do
     echo "Query: $QUERY_NAME"
     echo "---------------------"
 
+    OPAL_TIME=`$OPAL -s $QUERY $UNIPROT_SPROT_FASTA | grep 'Cpu time of searching:' | grep -oe $FLOAT_REGEX`
+    echo "OPAL: $OPAL_TIME"
+
+    SWIPE_TIME=`$SWIPE -a 1 -p 1 -G 3 -E 1 -M BLOSUM50 -b 0 -i $QUERY -d $UNIPROT_SPROT_BLASTDB \
+        | grep 'Elapsed:' | grep -oe $FLOAT_REGEX`
+    echo "SWIPE: $SWIPE_TIME"
+
     SSEARCH_TIME=`$SSEARCH -d 0 -T 1 -p -f -3 -g -1 -s BL50 $QUERY $UNIPROT_SPROT_FASTA \
         | grep 'Total Scan time:' | grep -oe $FLOAT_REGEX | head -1`
     echo "SSEARCH: $SSEARCH_TIME"
 
     SSW_TIME=`$SSW -p $UNIPROT_SPROT_FASTA $QUERY 2>&1 >/dev/null | grep -oe $FLOAT_REGEX`
     echo "SSW: $SSW_TIME"
-
-    SWIPE_TIME=`$SWIPE -a 1 -p 1 -G 3 -E 1 -M BLOSUM50 -b 0 -i $QUERY -d $UNIPROT_SPROT_BLASTDB \
-        | grep 'Elapsed:' | grep -oe $FLOAT_REGEX`
-    echo "SWIPE: $SWIPE_TIME"
-
-    OPAL_TIME=`$OPAL -s $QUERY $UNIPROT_SPROT_FASTA | grep 'Cpu time of searching:' | grep -oe $FLOAT_REGEX`
-    echo "OPAL: $OPAL_TIME"
 done
