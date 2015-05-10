@@ -221,6 +221,10 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     // Column index of best score for each current database sequence.
     int currDbSeqsBestScoreColumn[SIMD::numSeqs];
 
+    // Profile query -> here we store preprocessed score data needed in core loop.
+    // It is recalculated for each column.
+    __mxxxi P[alphabetLength];
+
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++) {
         currDbSeqsBestScore[i] = LOWER_BOUND;
@@ -254,7 +258,6 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     while (numEndedDbSeqs < dbLength) {
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
-        __mxxxi P[alphabetLength];
         typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
         for (unsigned char letter = 0; letter < alphabetLength; letter++) {
             int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
