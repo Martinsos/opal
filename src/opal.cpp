@@ -150,6 +150,12 @@ void print_mmxxxi(__mxxxi mm) {
         printf("%d ", unpacked[i]);
 }
 
+// This structure represents cell in dynamic programming matrix, but only with E and H values.
+struct CellEH {
+    __mxxxi H;
+    __mxxxi E;
+};
+
 /**
  * @param stopOnOverflow  If true, function will stop when first overflow happens.
  *            If false, function will not stop but continue with next sequence.
@@ -232,12 +238,11 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
     int rowsWithImprovement[queryLength];  // Indexes of rows where one of sequences improved score.
 
-    // Previous H column (array), previous E column (array), previous F, all signed short
-    __mxxxi prevHs[queryLength];
-    __mxxxi prevEs[queryLength];
+    // Previous Hs, previous Es, previous F, all signed short.
+    CellEH prevColumn[queryLength];  // Stores results of previous column in matrix.
     // Initialize all values to 0
     for (int i = 0; i < queryLength; i++) {
-        prevHs[i] = prevEs[i] = scoreZeroes;
+        prevColumn[i].H = prevColumn[i].E = scoreZeroes;
     }
 
     __mxxxi maxH = scoreZeroes;  // Best score in sequence
@@ -273,7 +278,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
             // Calculate E = max(lH-Q, lE-R)
-            __mxxxi E = SIMD::max(SIMD::sub(prevHs[r], Q), SIMD::sub(prevEs[r], R));
+            __mxxxi E = SIMD::max(SIMD::sub(prevColumn[r].H, Q), SIMD::sub(prevColumn[r].E, R));
 
             // Calculate F = max(uH-Q, uF-R)
             __mxxxi F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R));
@@ -310,11 +315,11 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             // Set uF, uH, ulH
             uF = F;
             uH = H;
-            ulH = prevHs[r];
+            ulH = prevColumn[r].H;
 
-            // Update prevHs, prevEs in advance for next column
-            prevEs[r] = E;
-            prevHs[r] = H;
+            // Remeber values so they can be used in next column.
+            prevColumn[r].E = E;
+            prevColumn[r].H = H;
 
             // For saturated: score is biased everywhere, but just score: E, F, H
             // Also, all scores except ulH_P certainly have value < 0
@@ -374,7 +379,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             for (int i = 0; i < rowsWithImprovementLength; i++) {
                 int r = rowsWithImprovement[i];
                 typename SIMD::type unpackedH[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
-                _mmxxx_store_si((__mxxxi*)unpackedH, prevHs[r]);
+                _mmxxx_store_si((__mxxxi*)unpackedH, prevColumn[r].H);
                 for (int j = 0; j < SIMD::numSeqs; j++) {
                     if (currDbSeqsPos[j] != 0 && !overflowed[j]) {  // If not null sequence or overflowedresult->endLocationQuery =
                         if (unpackedH[j] > currDbSeqsBestScore[j]) {
@@ -432,19 +437,19 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                         shortestDbSeqLength = currDbSeqsLengths[i];
                 }
             }
-            // Reset prevEs, prevHs and maxH
+            // Reset previous columns (Es and Hs) and maxH
             __mxxxi resetMaskPacked = _mmxxx_load_si((__mxxxi const*)resetMask);
             if (SIMD::negRange) {
-                for (int i = 0; i < queryLength; i++)
-                    prevEs[i] = SIMD::add(prevEs[i], resetMaskPacked);
-                for (int i = 0; i < queryLength; i++)
-                    prevHs[i] = SIMD::add(prevHs[i], resetMaskPacked);
+                for (int i = 0; i < queryLength; i++) {
+                    prevColumn[i].H = SIMD::add(prevColumn[i].H, resetMaskPacked);
+                    prevColumn[i].E = SIMD::add(prevColumn[i].E, resetMaskPacked);
+                }
                 maxH = SIMD::add(maxH, resetMaskPacked);
             } else {
-                for (int i = 0; i < queryLength; i++)
-                    prevEs[i] = _mmxxx_and_si(prevEs[i], resetMaskPacked);
-                for (int i = 0; i < queryLength; i++)
-                    prevHs[i] = _mmxxx_and_si(prevHs[i], resetMaskPacked);
+                for (int i = 0; i < queryLength; i++) {
+                    prevColumn[i].H = _mmxxx_and_si(prevColumn[i].H, resetMaskPacked);
+                    prevColumn[i].E = _mmxxx_and_si(prevColumn[i].E, resetMaskPacked);
+                }
                 maxH = _mmxxx_and_si(maxH, resetMaskPacked);
             }
             columnsSinceLastSeqEnd = 0;
