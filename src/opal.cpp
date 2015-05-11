@@ -11,6 +11,7 @@ extern "C" {
 
 #include "opal.h"
 
+#define COLS_AT_ONCE 4
 
 // I define aliases for SSE intrinsics, so they can be used in code not depending on SSE generation.
 // If available, AVX2 is used because it has two times bigger register, thus everything is two times faster.
@@ -156,6 +157,11 @@ struct CellEH {
     __mxxxi E;
 };
 
+struct CellFH {
+    __mxxxi H;
+    __mxxxi F;
+};
+
 /**
  * @param stopOnOverflow  If true, function will stop when first overflow happens.
  *            If false, function will not stop but continue with next sequence.
@@ -226,7 +232,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
     // Profile query -> here we store preprocessed score data needed in core loop.
     // It is recalculated for each column.
-    __mxxxi P[alphabetLength];
+    __mxxxi P[alphabetLength][COLS_AT_ONCE];
 
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++) {
@@ -252,83 +258,110 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     // ------------------------------------------------------------------ //
 
 
-    // For each column
     while (numEndedDbSeqs < dbLength) {
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
         typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
         for (unsigned char letter = 0; letter < alphabetLength; letter++) {
             int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
-            for (int i = 0; i < SIMD::numSeqs; i++) {
-                unsigned char* dbSeqPos = currDbSeqsPos[i];
-                if (dbSeqPos != 0)
-                    profileRow[i] = (typename SIMD::type)scoreMatrixRow[*dbSeqPos];
+            for (int dc = 0; dc < COLS_AT_ONCE; dc++) {
+                for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
+                    if (currDbSeqsLengths[seqIdx] - dc > 0) {
+                        profileRow[seqIdx] = (typename SIMD::type)scoreMatrixRow[*(currDbSeqsPos[seqIdx] + dc)];
+                    } else {
+                        // -1 can not affect result of calculation, so we use it as padding.
+                        profileRow[seqIdx] = -1;
+                    }
+                }
+                // TODO: Maybe load is redundant here since I do not really need it in register,
+                //     maybe I should store it in some different manner?
+                P[letter][dc] = _mmxxx_load_si((__mxxxi const*)profileRow);
             }
-            P[letter] = _mmxxx_load_si((__mxxxi const*)profileRow);
         }
         // ---------------------------------------------------------------------- //
-
-        // Previous cells: u - up, l - left, ul - up left
-        __mxxxi uF, uH, ulH;
-        uF = uH = ulH = scoreZeroes; // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
 
         __mxxxi ofTest = scoreZeroes; // Used for detecting the overflow when not using saturated ar
-
         int rowsWithImprovementLength = 0;
 
-        // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
-        for (int r = 0; r < queryLength; r++) { // For each cell in column
-            // Calculate E = max(lH-Q, lE-R)
-            __mxxxi E = SIMD::max(SIMD::sub(prevColumn[r].H, Q), SIMD::sub(prevColumn[r].E, R));
+        // Stores results from small part of previous row.
+        CellFH prevRow[COLS_AT_ONCE];
+        for (int dc = 0; dc < COLS_AT_ONCE; dc++) {
+            // F[-1, c] = H[-1, c] = 0
+            prevRow[dc].H = prevRow[dc].F = scoreZeroes;
+        }
 
-            // Calculate F = max(uH-Q, uF-R)
-            __mxxxi F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R));
+        // Notation: u - up, l - left, ul - up left.
+        __mxxxi ulH, lH, lE, E, F, H, ulH_P;
+        ulH = scoreZeroes; // H[-1, c-1] = 0
 
-            // Calculate H
-            __mxxxi H = SIMD::max(F, E);
-            if (!SIMD::negRange) {
-                // If not using negative range, then H could be negative at this moment so we need this
-                H = SIMD::max(H, zeroes);
+        // ----------------------- CORE LOOP ----------------------- //
+        for (int r = 0; r < queryLength; r++) { // For each query row
+            lH = prevColumn[r].H;
+            lE = prevColumn[r].E;
+
+            // We do not process just one cell, but COLS_AT_ONCE cells adjacent cells in the row at once!
+            // This provides speed up because it better uses cache / registers.
+            for (int dc = 0; dc < COLS_AT_ONCE; dc++) {
+                // Calculate E = max(lH-Q, lE-R)
+                E = SIMD::max(SIMD::sub(lH, Q), SIMD::sub(lE, R));
+
+                // Calculate F = max(uH-Q, uF-R)
+                F = SIMD::max(SIMD::sub(prevRow[dc].H, Q), SIMD::sub(prevRow[dc].F, R));
+
+                // Calculate H
+                H = SIMD::max(F, E);
+                if (!SIMD::negRange) {
+                    // If not using negative range, then H could be negative at this moment so we need this
+                    H = SIMD::max(H, zeroes);
+                }
+
+                // TODO: Reuse ulH here, no need to create ulH_P and waste a register (except if compiler optimizes this?)
+                ulH_P = SIMD::add(ulH, P[query[r]][dc]);
+                // If using negative range: if ulH_P >= 0 then we have overflow
+
+                H = SIMD::max(H, ulH_P);
+                // If using negative range: H will always be negative, even if ulH_P overflowed
+
+                // Save data needed for overflow detection. Not more than one condition will fire
+                if (SIMD::negRange)
+                    ofTest = _mmxxx_and_si(ofTest, ulH_P);
+                if (!SIMD::satArthm)
+                    ofTest = SIMD::min(ofTest, ulH_P);
+
+                // TODO: modify this one, it does not work well like this. I should also remember the column.
+                // If we need end location, remember row with best score.
+                if (searchType != OPAL_SEARCH_SCORE) {
+                    // We remember rows that had max scores, in order to find out the row of best score.
+                    rowsWithImprovement[rowsWithImprovementLength] = r;
+                    // TODO(martin): simdIsAllZeroes seems to bring significant slowdown, but I could
+                    // not find way to avoid it.
+                    rowsWithImprovementLength += 1 - simdIsAllZeroes(SIMD::cmpgt(H, maxH));
+                }
+
+                maxH = SIMD::max(maxH, H); // update best score
+
+                // Remember values for the next column.
+                lH = H;
+                lE = E;
+                ulH = prevRow[dc].H;
+
+                // Remember values for the next row.
+                prevRow[dc].H = H;
+                prevRow[dc].F = F;
+
+                // NOTE: For saturated, score is biased everywhere, but just score: E, F, H.
+                // Also, all scores except ulH_P certainly have value < 0.
             }
-            __mxxxi ulH_P = SIMD::add(ulH, P[query[r]]);
-            // If using negative range: if ulH_P >= 0 then we have overflow
 
-            H = SIMD::max(H, ulH_P);
-            // If using negative range: H will always be negative, even if ulH_P overflowed
-
-            // Save data needed for overflow detection. Not more then one condition will fire
-            if (SIMD::negRange)
-                ofTest = _mmxxx_and_si(ofTest, ulH_P);
-            if (!SIMD::satArthm)
-                ofTest = SIMD::min(ofTest, ulH_P);
-
-            // If we need end location, remember row with best score.
-            if (searchType != OPAL_SEARCH_SCORE) {
-                // We remember rows that had max scores, in order to find out the row of best score.
-                rowsWithImprovement[rowsWithImprovementLength] = r;
-                // TODO(martin): simdIsAllZeroes seems to bring significant slowdown, but I could
-                // not find way to avoid it.
-                rowsWithImprovementLength += 1 - simdIsAllZeroes(SIMD::cmpgt(H, maxH));
-            }
-
-            maxH = SIMD::max(maxH, H); // update best score
-
-            // Set uF, uH, ulH
-            uF = F;
-            uH = H;
             ulH = prevColumn[r].H;
-
-            // Remeber values so they can be used in next column.
-            prevColumn[r].E = E;
             prevColumn[r].H = H;
-
-            // For saturated: score is biased everywhere, but just score: E, F, H
-            // Also, all scores except ulH_P certainly have value < 0
+            prevColumn[r].E = E;
         }
         // ---------------------------------------------------------------------- //
 
+        // Update lengths (they can become negative, if padding was added).
         for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
-            currDbSeqsLengths[seqIdx] -= currDbSeqsLengths[seqIdx] > 0;
+            currDbSeqsLengths[seqIdx] -= COLS_AT_ONCE * (currDbSeqsLengths[seqIdx] > 0);
         }
 
         typename SIMD::type unpackedMaxH[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
@@ -372,17 +405,18 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         }
         // ---------------------------------------------------------------------- //
 
-        bool overflowDetected = false;  // True if overflow was detected in last column.
-        bool sequenceEnded = false;  // True if a sequence ended in last column.
+        bool overflowDetected = false;  // True if overflow was detected in last COLS_AT_ONCE cols.
+        bool sequenceEnded = false;  // True if sequence ended in last COLS_AT_ONCE cols.
         for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
             overflowDetected = overflowDetected || overflowed[seqIdx];
-            sequenceEnded = sequenceEnded || (currDbSeqsLengths[seqIdx] == 0);
+            sequenceEnded = sequenceEnded || ((currDbSeqsPos[seqIdx] != 0) && (currDbSeqsLengths[seqIdx] <= 0));
         }
         overflowOccured = overflowOccured || overflowDetected;
 
 
         // --------- Update end location of alignment ----------- //
         if (searchType != OPAL_SEARCH_SCORE) {
+            // TODO: this does not work well anymore, I have to update this code.
             for (int i = 0; i < rowsWithImprovementLength; i++) {
                 int r = rowsWithImprovement[i];
                 typename SIMD::type unpackedH[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
@@ -408,7 +442,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 if (currDbSeqsPos[i] != 0) { // If not null sequence
-                    if (overflowed[i] || currDbSeqsLengths[i] == 0) { // If sequence ended
+                    if (overflowed[i] || currDbSeqsLengths[i] <= 0) { // If sequence ended
                         numEndedDbSeqs++;
                         if (!overflowed[i]) {
                             // Save score and mark as calculated
@@ -426,7 +460,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                             }
                         }
                         currDbSeqsBestScore[i] = LOWER_BOUND;
-                        // Load next sequence
+                        // Load next sequence -> sets pos to 0 if sequence becomes null.
                         loadNextSequence(nextDbSeqIdx, dbLength, currDbSeqsIdxs[i], currDbSeqsPos[i],
                                          currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs);
                         // If negative range, sets to LOWER_BOUND when used with saturated add and value < 0,
@@ -436,7 +470,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                         // Does not change anything when used with saturated add / and.
                         resetMask[i] = SIMD::negRange ? 0 : -1;
                         if (currDbSeqsPos[i] != 0)
-                            currDbSeqsPos[i]++; // If not new and not null, move for one element
+                            currDbSeqsPos[i] += COLS_AT_ONCE; // If not new and not null, update position.
                     }
                 }
             }
@@ -456,9 +490,10 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 maxH = _mmxxx_and_si(maxH, resetMaskPacked);
             }
         } else { // If no sequences ended
-            // Move for one element in all sequences
-            for (int i = 0; i < SIMD::numSeqs; i++)
-                currDbSeqsPos[i] += (currDbSeqsPos[i] != 0);
+            // Move pos to current element in all non-null sequences.
+            for (int i = 0; i < SIMD::numSeqs; i++) {
+                currDbSeqsPos[i] += COLS_AT_ONCE * (currDbSeqsPos[i] != 0);
+            }
         }
         // ---------------------------------------------------------------------- //
     }
@@ -483,7 +518,8 @@ static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDb
         nextDbSeqIdx++;
         return true;
     } else { // If there are no more sequences to load, load "null" sequence
-        currDbSeqIdx = currDbSeqLength = -1; // Set to -1 if there are no more sequences
+        currDbSeqIdx = -1;
+        currDbSeqLength = -COLS_AT_ONCE;
         currDbSeqPos = 0;
         return false;
     }
