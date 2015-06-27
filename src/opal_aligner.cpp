@@ -113,7 +113,6 @@ int main(int argc, char * const argv[]) {
     // Build db
     char* dbFilepath = argv[optind+1];
     FILE* dbFile = fopen(dbFilepath, "r");
-    int wholeDbLength = 0;
     if (dbFile == 0) {
         printf("Error: There is no file with name %s\n", dbFilepath);
         return 1;
@@ -121,16 +120,14 @@ int main(int argc, char * const argv[]) {
 
     double cpuTime = 0;
     bool wholeDbRead = false;
+    int dbTotalNumResidues = 0;  // Sum of lengths of all database sequences.
+    int dbTotalLength = 0;  // Number of sequences in the database.
     while (!wholeDbRead) {
         vector< vector<unsigned char> >* dbSequences = new vector< vector<unsigned char> >();
         printf("\nReading database fasta file...\n");
+        // Chunk of database is read and processed (if database is not huge, there will be only one chunk).
+        // We do this because if database is huge, it may not fit into memory.
         wholeDbRead = readFastaSequences(dbFile, alphabet, alphabetLength, dbSequences);
-        if (wholeDbRead) {
-            printf("Whole database read!\n");
-        } else {
-            printf("Chunk of database read!\n");
-        }
-
         int dbLength = dbSequences->size();
         unsigned char** db = new unsigned char*[dbLength];
         int* dbSeqLengths = new int[dbLength];
@@ -141,6 +138,13 @@ int main(int argc, char * const argv[]) {
             dbNumResidues += dbSeqLengths[i];
         }
         printf("Read %d database sequences, %d residues total.\n", dbLength, dbNumResidues);
+
+        dbTotalNumResidues += dbNumResidues;
+        dbTotalLength += dbLength;
+        if (wholeDbRead) {
+            printf("Whole database read: %d database sequences, %d residues in total.\n",
+                   dbTotalLength, dbTotalNumResidues);
+        }
 
         // ----------------------------- MAIN CALCULATION ----------------------------- //
         OpalSearchResult** results = new OpalSearchResult*[dbLength];
@@ -165,7 +169,7 @@ int main(int argc, char * const argv[]) {
         if (!silent) {
             printf("\n#<i>: <score> (<query start>, <target start>) (<query end>, <target end>)\n");
             for (int i = 0; i < dbLength; i++) {
-                printf("#%d: %d", wholeDbLength + i, results[i]->score);
+                printf("#%d: %d", dbTotalLength - dbLength + i, results[i]->score);
                 if (results[i]->startLocationQuery >= 0) {
                     printf(" (%d, %d)", results[i]->startLocationQuery, results[i]->startLocationTarget);
                 } else {
@@ -184,8 +188,6 @@ int main(int argc, char * const argv[]) {
             }
         }
 
-        wholeDbLength += dbLength;
-
         for (int i = 0; i < dbLength; i++) {
             if (results[i]->alignment) {
                 free(results[i]->alignment);
@@ -198,8 +200,11 @@ int main(int argc, char * const argv[]) {
         delete dbSequences;
     }
 
-    printf("\nCpu time of searching: %lf\n", cpuTime);
-    printf("Read %d database sequences in total.\n", wholeDbLength);
+    printf("\nCpu time of searching: %.2lf\n", cpuTime);
+    if (searchType != OPAL_SEARCH_ALIGNMENT) {
+        printf("GCUPS (giga cell updates per second): %.2lf\n",
+               dbTotalNumResidues / 1000000000.0 * queryLength / cpuTime);
+    }
 
     // Print this statistics only for SW because they are not valid for other modes.
     /*   if (!(strcmp(mode, "SW"))) {
