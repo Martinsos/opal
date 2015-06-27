@@ -17,7 +17,7 @@ UNIPROT_SPROT_BLASTDB=$PROTEIN_DATA/uniprot_sprot
 # Gap open: 3
 # Gap extension: 1
 # Matrix: blosum 50
-for QUERY_NAME in P18080 # O74807 P19930 Q3ZA13
+for QUERY_NAME in O74807 P19930 Q3ZAI3 P18080
 do
     QUERY=$PROTEIN_DATA/$QUERY_NAME.fasta
 
