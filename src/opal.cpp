@@ -227,6 +227,8 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     // Profile query -> here we store preprocessed score data needed in core loop.
     // It is recalculated for each column.
     __mxxxi P[alphabetLength];
+    // Additional profile query that is used for match extension bonus.
+    __mxxxi Pme[alphabetLength];
 
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++) {
@@ -243,6 +245,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
     // Previous Hs, previous Es, previous F, all signed short.
     CellEH prevColumn[queryLength];  // Stores results of previous column in matrix.
+    __mxxxi prevM[queryLength];  // Stores values of M from previous column.
     // Initialize all values to 0
     for (int i = 0; i < queryLength; i++) {
         prevColumn[i].H = prevColumn[i].E = scoreZeroes;
@@ -261,16 +264,25 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 unsigned char* dbSeqPos = currDbSeqsPos[i];
-                if (dbSeqPos != 0)
+                if (dbSeqPos != 0) {
                     profileRow[i] = (typename SIMD::type)scoreMatrixRow[*dbSeqPos];
+                }
             }
             P[letter] = _mmxxx_load_si((__mxxxi const*)profileRow);
+            // Construct profile used for match extension bonus.
+            for (int i = 0; i < SIMD::numSeqs; i++) {
+                if (letter != *(currDbSeqsPos[i])) {
+                    profileRow[i] -= Me;
+                }
+            }
+            Pme[letter] = _mmxxx_load_si((__mxxxi const*)profileRow);
         }
         // ---------------------------------------------------------------------- //
 
         // Previous cells: u - up, l - left, ul - up left
-        __mxxxi uF, uH, ulH;
+        __mxxxi uF, uH, ulH, ulM;
         uF = uH = ulH = scoreZeroes; // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
+        ulM = SIMD::sub(scoreZeroes, Me); // TODO(martin): is this ok?
 
         __mxxxi ofTest = scoreZeroes; // Used for detecting the overflow when not using saturated ar
 
@@ -292,15 +304,23 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             }
             __mxxxi ulH_P = SIMD::add(ulH, P[query[r]]);
             // If using negative range: if ulH_P >= 0 then we have overflow
-
             H = SIMD::max(H, ulH_P);
             // If using negative range: H will always be negative, even if ulH_P overflowed
+
+            __mxxxi H_M = SIMD::add(SIMD::add(ulM, Pme[query[r]]), Me);
+            H = SIMD::max(H, H_M);
+
 
             // Save data needed for overflow detection. Not more then one condition will fire
             if (SIMD::negRange)
                 ofTest = _mmxxx_and_si(ofTest, ulH_P);
             if (!SIMD::satArthm)
                 ofTest = SIMD::min(ofTest, ulH_P);
+            if (SIMD::negRange)
+                ofTest = _mmxxx_and_si(ofTest, H_M);
+            if (!SIMD::satArthm)
+                ofTest = SIMD::min(ofTest, H_M);
+
 
             // If we need end location, remember row with best score.
             if (searchType != OPAL_SEARCH_SCORE) {
@@ -317,8 +337,10 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             uF = F;
             uH = H;
             ulH = prevColumn[r].H;
+            ulM = prevM[r];
 
             // Remeber values so they can be used in next column.
+            prevM[r] = prevColumn[r].H + Pme[query[r]];
             prevColumn[r].E = E;
             prevColumn[r].H = H;
 
