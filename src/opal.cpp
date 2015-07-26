@@ -12,7 +12,7 @@ extern "C" {
 #include "opal.h"
 
 
-const int Me = 0;  // TODO: make this a variable, this is just dummy value for now.
+const int Me = 2;  // TODO: make this a variable, this is just dummy value for now.
 
 
 // I define aliases for SSE intrinsics, so they can be used in code not depending on SSE generation.
@@ -279,7 +279,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 if (dbSeqPos != 0) {
                     P_unpacked[i] = (typename SIMD::type)scoreMatrixRow[*dbSeqPos];
                     // All 0-s if no match, and all 1-s if match.
-                    Pb_unpacked[i] = (typename SIMD::type)(letter == *dbSeqPos ? LOWER_BOUND : 0);
+                    Pb_unpacked[i] = (typename SIMD::type)(letter == *dbSeqPos ? -1 : 0);
                 }
             }
             P[letter] = _mmxxx_load_si((__mxxxi const*)P_unpacked);
@@ -296,6 +296,18 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
         int rowsWithImprovementLength = 0;
 
+        /*
+        printf("target positions:\n");
+        for (int i = 0; i < SIMD::numSeqs; i++) {
+            if (currDbSeqsIdxs[i] >= 0) {
+                printf("%ld ", currDbSeqsPos[i] - db[currDbSeqsIdxs[i]]);
+            } else {
+                printf("- ");
+            }
+        }
+        printf("\n");
+        */
+
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
             // Calculate E = max(lH-Q, lE-R)
@@ -306,6 +318,26 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
             // Calculate B = (Pb & ulPb) & M
             __mxxxi B = _mmxxx_and_si(_mmxxx_and_si(Pb[query[r]], ulPb), M);
+
+            /*
+            printf("query position: %d\n", r);
+            printf("ulPb:\n");
+            print_mmxxxi<SIMD>(ulPb);
+            printf("\n");
+            printf("Pb:\n");
+            print_mmxxxi<SIMD>(Pb[query[r]]);
+            printf("\n");
+            printf("M:\n");
+            print_mmxxxi<SIMD>(M);
+            printf("\n");
+            printf("and:\n");
+            print_mmxxxi<SIMD>(_mmxxx_and_si(Pb[query[r]], ulPb));
+            printf("\n");
+            printf("B:\n");
+            print_mmxxxi<SIMD>(B);
+            printf("\n");
+            */
+
 
             // Calculate D = max(ulD + B, ulH) + P
             // D is max score if we arrive to this cell from upper left cell.
@@ -474,7 +506,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                     }
                 }
             }
-            // Reset previous columns (Es and Hs) and maxH
+            // Reset previous columns (Es and Hs), Pb and maxH
             __mxxxi resetMaskPacked = _mmxxx_load_si((__mxxxi const*)resetMask);
             if (SIMD::negRange) {
                 for (int i = 0; i < queryLength; i++) {
@@ -490,6 +522,14 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                     prevD[i] = _mmxxx_and_si(prevD[i], resetMaskPacked);
                 }
                 maxH = _mmxxx_and_si(maxH, resetMaskPacked);
+            }
+            for (unsigned char letter = 0; letter < alphabetLength; letter++) {
+                if (SIMD::negRange) {
+                    // We need zeroes to reset, ones to preserve.
+                    Pb[letter] = _mmxxx_and_si(Pb[letter], SIMD::cmpgt(resetMaskPacked, SIMD::set1(LOWER_BOUND)));
+                } else {
+                    Pb[letter] = _mmxxx_and_si(Pb[letter], resetMaskPacked);
+                }
             }
         } else { // If no sequences ended
             // Move for one element in all sequences
@@ -1326,16 +1366,17 @@ static void findAlignment(
             uH = -1 * gapOpen - c * gapExt;
             ulH = c == 0 ? 0 : uH + gapExt;
         } else {
-            uH = uF = ulD = LOWER_SCORE_BOUND;  // Out of band, so set to -inf.
+            uH = uF = LOWER_SCORE_BOUND;  // Out of band, so set to -inf.
             ulH = prevColumn[rBandStart - 1].H;
+            ulD = prevColumn[rBandStart - 1].D;
         }
 
         for (int r = rBandStart; r <= rBandEnd; r++) {
             int E = std::max(prevColumn[r].H - gapOpen, prevColumn[r].E - gapExt);
             int F = std::max(uH - gapOpen, uF - gapExt);
             int score = scoreMatrix[query[r] * alphabetLength + target[c]];
-            int B = (r > 0 && c > 0 && query[r] == target[c] && query[r - 1] == target[c - 1]) ? Me : 0;
-            int D = std::max(ulH, ulD + B) + score;
+            int B = (r > 0 && c > 0 && (query[r] == target[c]) && (query[r - 1] == target[c - 1])) ? Me : 0;
+            int D = std::max(std::max(ulH, ulD + B) + score, 0);
             H = std::max(E, std::max(F, D));
             /*
             printf("E: %d ", E);
@@ -1543,6 +1584,11 @@ extern int opalSearchDatabase(
                     gapOpen, gapExt, scoreMatrix, alphabetLength,
                     results[i]->score, &result, mode);
                 //printf("%d %d\n", results[i]->score, result.score);
+                if (results[i]->score != result.score) {
+                    for (int r = 0; r < queryLength; r++) printf("%d ", query[r]); printf("\n");
+                    for (int r = 0; r < dbSeqLengths[i]; r++) printf("%d ", db[i][r]); printf("\n");
+                    printf("%d %d\n", results[i]->score, result.score);
+                }
                 assert(results[i]->score == result.score);
                 // Translate results.
                 results[i]->startLocationQuery = alignQueryLength - result.endLocationQuery - 1;
