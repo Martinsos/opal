@@ -207,6 +207,7 @@ int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int
                 OpalSearchResult* results[]) {
     int prevHs[queryLength];
     int prevEs[queryLength];
+    int prevDs[queryLength];
 
     for (int seqIdx = 0; seqIdx < dbLength; seqIdx++) {
         int maxH = 0;
@@ -215,18 +216,20 @@ int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int
 
         // Initialize all values to 0
         for (int i = 0; i < queryLength; i++) {
-            prevHs[i] = prevEs[i] = 0;
+            prevHs[i] = prevEs[i] = prevDs[i] = 0;
         }
 
         for (int c = 0; c < dbSeqLengths[seqIdx]; c++) {
-            int uF, uH, ulH;
-            uF = uH = ulH = 0;
+            int uF, uH, ulH, ulD;
+            uF = uH = ulH = ulD = 0;
 
             for (int r = 0; r < queryLength; r++) {
                 int E = max(prevHs[r] - gapOpen, prevEs[r] - gapExt);
                 int F = max(uH - gapOpen, uF - gapExt);
                 int score = scoreMatrix[query[r] * alphabetLength + db[seqIdx][c]];
-                int H = max(0, max(E, max(F, ulH+score)));
+                int B = (r > 0 && c > 0 && query[r] == db[seqIdx][c] && query[r - 1] == db[seqIdx][c - 1]) ? Me : 0;
+                int D = max(max(ulH, ulD + B) + score, 0);
+                int H = max(E, max(F, D));
                 if (H > maxH) {
                     endLocationTarget = c;
                     endLocationQuery = r;
@@ -235,9 +238,11 @@ int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int
                 uF = F;
                 uH = H;
                 ulH = prevHs[r];
+                ulD = prevDs[r];
 
                 prevHs[r] = H;
                 prevEs[r] = E;
+                prevDs[r] = D;
             }
         }
 
@@ -294,7 +299,7 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
                 int E = max(prevHs[r] - gapOpen, prevEs[r] - gapExt);
                 int F = max(uH - gapOpen, uF - gapExt);
                 int score = scoreMatrix[query[r] * alphabetLength + db[seqIdx][c]];
-                H = max(E, max(F, ulH+score));
+                H = max(E, max(F, ulH + score));
 
                 if (mode == OPAL_MODE_OV && c == targetLength - 1) {
                     if (H > maxH) {
@@ -396,7 +401,8 @@ bool checkAlignment(const unsigned char* query, int queryLength, const unsigned 
                 printf("Should be match but is a mismatch! (tIdx, qIdx, i): (%d, %d, %d)\n", tIdx, qIdx, i);
                 return false;
             }
-            alignScore += scoreMatrix[query[qIdx] * alphabetLength + target[tIdx]];
+            alignScore += scoreMatrix[query[qIdx] * alphabetLength + target[tIdx]]
+                + (prevOperation == OPAL_ALIGN_MATCH ? Me : 0);
             qIdx++; tIdx++; break;
         case OPAL_ALIGN_MISMATCH:
             if (query[qIdx] == target[tIdx]) {

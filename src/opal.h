@@ -9,6 +9,8 @@
  *  - works for SSE4.1 and higher
  *************************************************************************************/
 
+const int Me = 1;  // TODO: make this a variable, this is just dummy value for now.
+
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -12,9 +12,6 @@ extern "C" {
 #include "opal.h"
 
 
-const int Me = 2;  // TODO: make this a variable, this is just dummy value for now.
-
-
 // I define aliases for SSE intrinsics, so they can be used in code not depending on SSE generation.
 // If available, AVX2 is used because it has two times bigger register, thus everything is two times faster.
 #ifdef __AVX2__
