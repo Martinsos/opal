@@ -12,6 +12,9 @@ extern "C" {
 #include "opal.h"
 
 
+const int Me = 0;  // TODO: make this a variable, this is just dummy value for now.
+
+
 // I define aliases for SSE intrinsics, so they can be used in code not depending on SSE generation.
 // If available, AVX2 is used because it has two times bigger register, thus everything is two times faster.
 #ifdef __AVX2__
@@ -174,9 +177,10 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     bool overflowOccured = false;  // True if overflow was detected at least once.
 
     // ----------------------- CHECK ARGUMENTS -------------------------- //
-    // Check if Q, R or scoreMatrix have values too big for used score type
-    if (gapOpen < LOWER_BOUND || UPPER_BOUND < gapOpen || gapExt < LOWER_BOUND || UPPER_BOUND < gapExt) {
-        return 1;
+    // Check if Q, R, Me or scoreMatrix have values too big for used score type
+    if (gapOpen < LOWER_BOUND || UPPER_BOUND < gapOpen || gapExt < LOWER_BOUND || UPPER_BOUND < gapExt
+        || Me < LOWER_BOUND || Me > UPPER_BOUND) {
+        return OPAL_ERR_OVERFLOW;
     }
     if (!SIMD::satArthm) {
         // These extra limits are enforced so overflow could be detected more efficiently
@@ -192,7 +196,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 return OPAL_ERR_OVERFLOW;
             }
             if (!SIMD::satArthm) {
-                if (score <= LOWER_BOUND/2 || UPPER_BOUND/2 <= score)
+                if (score <= LOWER_BOUND/2 || UPPER_BOUND/2 <= score + Me)
                     return OPAL_ERR_OVERFLOW;
             }
         }
@@ -227,8 +231,14 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     // Profile query -> here we store preprocessed score data needed in core loop.
     // It is recalculated for each column.
     __mxxxi P[alphabetLength];
-    // Additional profile query that is used for match extension bonus.
-    __mxxxi Pme[alphabetLength];
+    // Similar like query profile P, but does not contain score -> instead it has
+    // 0 for mismatch and all 1-s for match.
+    __mxxxi Pb[alphabetLength];
+    __mxxxi prevPb[alphabetLength];
+    // Set prevPb to all zeroes -> border conditions.
+    for (unsigned char letter = 0; letter < alphabetLength; letter++) {
+        prevPb[letter] = zeroes;
+    }
 
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++) {
@@ -237,18 +247,19 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                          currDbSeqsLengths[i], db, dbSeqLengths, calculated, numEndedDbSeqs);
     }
 
-    // Q is gap open penalty, R is gap ext penalty.
+    // Q is gap open penalty, R is gap ext penalty, M is match ext bonus.
     __mxxxi Q = SIMD::set1(gapOpen);
     __mxxxi R = SIMD::set1(gapExt);
+    __mxxxi M = SIMD::set1(Me);
 
     int rowsWithImprovement[queryLength];  // Indexes of rows where one of sequences improved score.
 
     // Previous Hs, previous Es, previous F, all signed short.
     CellEH prevColumn[queryLength];  // Stores results of previous column in matrix.
-    __mxxxi prevM[queryLength];  // Stores values of M from previous column.
+    __mxxxi prevD[queryLength];  // Stores values of D from previous column.
     // Initialize all values to 0
     for (int i = 0; i < queryLength; i++) {
-        prevColumn[i].H = prevColumn[i].E = scoreZeroes;
+        prevColumn[i].H = prevColumn[i].E = prevD[i] = scoreZeroes;
     }
 
     __mxxxi maxH = scoreZeroes;  // Best score in sequence
@@ -259,30 +270,27 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     while (numEndedDbSeqs < dbLength) {
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
-        typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+        typename SIMD::type P_unpacked[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+        typename SIMD::type Pb_unpacked[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
         for (unsigned char letter = 0; letter < alphabetLength; letter++) {
             int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 unsigned char* dbSeqPos = currDbSeqsPos[i];
                 if (dbSeqPos != 0) {
-                    profileRow[i] = (typename SIMD::type)scoreMatrixRow[*dbSeqPos];
+                    P_unpacked[i] = (typename SIMD::type)scoreMatrixRow[*dbSeqPos];
+                    // All 0-s if no match, and all 1-s if match.
+                    Pb_unpacked[i] = (typename SIMD::type)(letter == *dbSeqPos ? LOWER_BOUND : 0);
                 }
             }
-            P[letter] = _mmxxx_load_si((__mxxxi const*)profileRow);
-            // Construct profile used for match extension bonus.
-            for (int i = 0; i < SIMD::numSeqs; i++) {
-                if (letter != *(currDbSeqsPos[i])) {
-                    profileRow[i] -= Me;
-                }
-            }
-            Pme[letter] = _mmxxx_load_si((__mxxxi const*)profileRow);
+            P[letter] = _mmxxx_load_si((__mxxxi const*)P_unpacked);
+            Pb[letter] = _mmxxx_load_si((__mxxxi const*)Pb_unpacked);
         }
         // ---------------------------------------------------------------------- //
 
         // Previous cells: u - up, l - left, ul - up left
-        __mxxxi uF, uH, ulH, ulM;
-        uF = uH = ulH = scoreZeroes; // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
-        ulM = SIMD::sub(scoreZeroes, Me); // TODO(martin): is this ok?
+        __mxxxi uF, uH, ulH, ulD, ulPb;
+        uF = uH = ulH = ulD = scoreZeroes; // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
+        ulPb = zeroes;
 
         __mxxxi ofTest = scoreZeroes; // Used for detecting the overflow when not using saturated ar
 
@@ -296,31 +304,34 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             // Calculate F = max(uH-Q, uF-R)
             __mxxxi F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R));
 
+            // Calculate B = (Pb & ulPb) & M
+            __mxxxi B = _mmxxx_and_si(_mmxxx_and_si(Pb[query[r]], ulPb), M);
+
+            // Calculate D = max(ulD + B, ulH) + P
+            // D is max score if we arrive to this cell from upper left cell.
+            __mxxxi D_ulD = SIMD::add(SIMD::add(ulD, B), P[query[r]]);
+            __mxxxi D_ulH = SIMD::add(ulH, P[query[r]]);
+            __mxxxi D = SIMD::max(SIMD::max(D_ulD, D_ulH), scoreZeroes);
+
             // Calculate H
             __mxxxi H = SIMD::max(F, E);
             if (!SIMD::negRange) {
                 // If not using negative range, then H could be negative at this moment so we need this
-                H = SIMD::max(H, zeroes);
+                H = SIMD::max(H, scoreZeroes); // This is redundant now?
             }
-            __mxxxi ulH_P = SIMD::add(ulH, P[query[r]]);
-            // If using negative range: if ulH_P >= 0 then we have overflow
-            H = SIMD::max(H, ulH_P);
-            // If using negative range: H will always be negative, even if ulH_P overflowed
-
-            __mxxxi H_M = SIMD::add(SIMD::add(ulM, Pme[query[r]]), Me);
-            H = SIMD::max(H, H_M);
-
+            // If using negative range: if D_ulH >= 0 then we have overflow
+            H = SIMD::max(H, D);
+            // If using negative range: H will always be negative, even if D overflowed
 
             // Save data needed for overflow detection. Not more then one condition will fire
-            if (SIMD::negRange)
-                ofTest = _mmxxx_and_si(ofTest, ulH_P);
-            if (!SIMD::satArthm)
-                ofTest = SIMD::min(ofTest, ulH_P);
-            if (SIMD::negRange)
-                ofTest = _mmxxx_and_si(ofTest, H_M);
-            if (!SIMD::satArthm)
-                ofTest = SIMD::min(ofTest, H_M);
-
+            if (SIMD::negRange) {
+                ofTest = _mmxxx_and_si(ofTest, D_ulD);
+                ofTest = _mmxxx_and_si(ofTest, D_ulH);
+            }
+            if (!SIMD::satArthm) {
+                ofTest = SIMD::min(ofTest, D_ulD);
+                ofTest = SIMD::min(ofTest, D_ulH);
+            }
 
             // If we need end location, remember row with best score.
             if (searchType != OPAL_SEARCH_SCORE) {
@@ -337,10 +348,11 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             uF = F;
             uH = H;
             ulH = prevColumn[r].H;
-            ulM = prevM[r];
+            ulD = prevD[r];
+            ulPb = prevPb[query[r]];
 
-            // Remeber values so they can be used in next column.
-            prevM[r] = prevColumn[r].H + Pme[query[r]];
+            // Remember values so they can be used in next column.
+            prevD[r] = D;
             prevColumn[r].E = E;
             prevColumn[r].H = H;
 
@@ -373,7 +385,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             }
         } else {
             if (SIMD::negRange) {
-                // Since I use saturation, I check if minUlH_P was non negative
+                // Since I use saturation, I check if score was non negative
                 typename SIMD::type unpackedOfTest[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
                 _mmxxx_store_si((__mxxxi*)unpackedOfTest, ofTest);
                 for (int i = 0; i < SIMD::numSeqs; i++) {
@@ -468,12 +480,14 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 for (int i = 0; i < queryLength; i++) {
                     prevColumn[i].H = SIMD::add(prevColumn[i].H, resetMaskPacked);
                     prevColumn[i].E = SIMD::add(prevColumn[i].E, resetMaskPacked);
+                    prevD[i] = SIMD::add(prevD[i], resetMaskPacked);
                 }
                 maxH = SIMD::add(maxH, resetMaskPacked);
             } else {
                 for (int i = 0; i < queryLength; i++) {
                     prevColumn[i].H = _mmxxx_and_si(prevColumn[i].H, resetMaskPacked);
                     prevColumn[i].E = _mmxxx_and_si(prevColumn[i].E, resetMaskPacked);
+                    prevD[i] = _mmxxx_and_si(prevD[i], resetMaskPacked);
                 }
                 maxH = _mmxxx_and_si(maxH, resetMaskPacked);
             }
@@ -483,6 +497,11 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 currDbSeqsPos[i] += (currDbSeqsPos[i] != 0);
         }
         // ---------------------------------------------------------------------- //
+
+        // Store current Pb for the next column.
+        for (unsigned char letter = 0; letter < alphabetLength; letter++) {
+            prevPb[letter] = Pb[letter];
+        }
     }
 
     if (overflowOccured) {
@@ -1225,9 +1244,9 @@ static inline void revertArray(T array[], int length) {
 // Here I store scores for one cell in score matrix.
 class Cell {
 public:
-    int H, E, F;
+    int H, E, F, D;
     enum class Field {
-        H, E, F
+        H, E, F, D
     };
 };
 
@@ -1276,7 +1295,7 @@ static void findAlignment(
 
     std::pair<int, int> bandBorders = calculateBandBorders(
         scoreLimit, mode, queryLength, targetLength, gapOpen, gapExt,
-        arrayMax(scoreMatrix, alphabetLength * alphabetLength));
+        arrayMax(scoreMatrix, alphabetLength * alphabetLength) + Me);
 
     assert(bandBorders.first >= 0 && bandBorders.first < queryLength);
     assert(bandBorders.second >= 0 && bandBorders.second < targetLength);
@@ -1287,7 +1306,7 @@ static void findAlignment(
     const int LOWER_SCORE_BOUND = INT_MIN + std::max(gapOpen, gapExt);
     for (int r = 0; r < queryLength; r++) {
         initialColumn[r].H = -1 * gapOpen - r * gapExt;
-        initialColumn[r].E = LOWER_SCORE_BOUND;
+        initialColumn[r].E = initialColumn[r].D = LOWER_SCORE_BOUND;
     }
 
     Cell* prevColumn = initialColumn;
@@ -1301,13 +1320,13 @@ static void findAlignment(
         int rBandStart = std::max(0, c - bandBorders.second);
         int rBandEnd = std::min(queryLength - 1, c + bandBorders.first);
 
-        int uF, uH, ulH;
+        int uF, uH, ulH, ulD;
         if (rBandStart == 0) {
-            uF = LOWER_SCORE_BOUND;
+            uF = ulD = LOWER_SCORE_BOUND;
             uH = -1 * gapOpen - c * gapExt;
             ulH = c == 0 ? 0 : uH + gapExt;
         } else {
-            uH = uF = LOWER_SCORE_BOUND;  // Out of band, so set to -inf.
+            uH = uF = ulD = LOWER_SCORE_BOUND;  // Out of band, so set to -inf.
             ulH = prevColumn[rBandStart - 1].H;
         }
 
@@ -1315,7 +1334,9 @@ static void findAlignment(
             int E = std::max(prevColumn[r].H - gapOpen, prevColumn[r].E - gapExt);
             int F = std::max(uH - gapOpen, uF - gapExt);
             int score = scoreMatrix[query[r] * alphabetLength + target[c]];
-            H = std::max(E, std::max(F, ulH + score));
+            int B = (r > 0 && c > 0 && query[r] == target[c] && query[r - 1] == target[c - 1]) ? Me : 0;
+            int D = std::max(ulH, ulD + B) + score;
+            H = std::max(E, std::max(F, D));
             /*
             printf("E: %d ", E);
             printf("F: %d ", F);
@@ -1334,18 +1355,20 @@ static void findAlignment(
             uF = F;
             uH = H;
             ulH = prevColumn[r].H;
+            ulD = prevColumn[r].D;
 
             matrix[c][r].H = H;
             matrix[c][r].E = E;
             matrix[c][r].F = F;
+            matrix[c][r].D = D;
         }
 
         // Set all cells that are out of band to -inf.
         for (int r = 0; r < rBandStart; r++) {
-            matrix[c][r].E = matrix[c][r].H = matrix[c][r].F = LOWER_SCORE_BOUND;
+            matrix[c][r].E = matrix[c][r].H = matrix[c][r].F = matrix[c][r].D = LOWER_SCORE_BOUND;
         }
         for (int r = rBandEnd + 1; r < queryLength; r++) {
-            matrix[c][r].E = matrix[c][r].H = matrix[c][r].F = LOWER_SCORE_BOUND;
+            matrix[c][r].E = matrix[c][r].H = matrix[c][r].F = matrix[c][r].D = LOWER_SCORE_BOUND;
         }
 
         if (mode == OPAL_MODE_HW || mode == OPAL_MODE_OV) {
@@ -1402,9 +1425,7 @@ static void findAlignment(
             } else if (cell.H == cell.F) {
                 field = Cell::Field::F;
             } else {
-                alignment[alignmentLength++] = (query[rIdx] == target[cIdx] ? OPAL_ALIGN_MATCH
-                                                : OPAL_ALIGN_MISMATCH);
-                cIdx--; rIdx--;
+                field = Cell::Field::D;
             }
             break;
         case Cell::Field::E:
@@ -1416,6 +1437,12 @@ static void findAlignment(
             field = (cell.F == matrix[cIdx][rIdx - 1].H - gapOpen) ? Cell::Field::H : Cell::Field::F;
             alignment[alignmentLength++] = OPAL_ALIGN_DEL;
             rIdx--;
+            break;
+        case Cell::Field::D:
+            int score = scoreMatrix[query[rIdx] * alphabetLength + target[cIdx]];
+            field = (rIdx > 0 && cIdx > 0 && cell.D != matrix[cIdx - 1][rIdx - 1].H + score) ? Cell::Field::D : Cell::Field::H;
+            alignment[alignmentLength++] = (query[rIdx] == target[cIdx] ? OPAL_ALIGN_MATCH : OPAL_ALIGN_MISMATCH);
+            cIdx--; rIdx--;
             break;
         }
     }

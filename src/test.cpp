@@ -31,6 +31,9 @@ int main(int argc, char * const argv[]) {
         strcpy(mode, argv[1]);
     }
 
+    int searchType = OPAL_SEARCH_ALIGNMENT;
+
+
     clock_t start, finish;
     srand(42);
 
@@ -96,7 +99,7 @@ int main(int argc, char * const argv[]) {
     }
     resultCode = opalSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths,
                                     gapOpen, gapExt, scoreMatrix, alphabetLength, results,
-                                    OPAL_SEARCH_ALIGNMENT, modeCode, OPAL_OVERFLOW_SIMPLE);
+                                    searchType, modeCode, OPAL_OVERFLOW_SIMPLE);
     finish = clock();
     double time1 = ((double)(finish-start)) / CLOCKS_PER_SEC;
 
@@ -154,19 +157,22 @@ int main(int argc, char * const argv[]) {
         if (results[i]->score != results2[i]->score) {
             printf("#%d: score is %d but should be %d\n", i, results[i]->score, results2[i]->score);
         }
-        if (results[i]->endLocationTarget != results2[i]->endLocationTarget) {
-            printf("#%d: end location in target is %d but should be %d\n",
-                   i, results[i]->endLocationTarget, results2[i]->endLocationTarget);
+        if (searchType != OPAL_SEARCH_SCORE) {
+            if (results[i]->endLocationTarget != results2[i]->endLocationTarget) {
+                printf("#%d: end location in target is %d but should be %d\n",
+                       i, results[i]->endLocationTarget, results2[i]->endLocationTarget);
+            }
+            if (results[i]->endLocationQuery != results2[i]->endLocationQuery) {
+                printf("#%d: end location in query is %d but should be %d\n",
+                       i, results[i]->endLocationQuery, results2[i]->endLocationQuery);
+            }
+            //printf("#%d: score -> %d, end location -> (q: %d, t: %d)\n",
+            //       i, results[i]->score, results[i]->endLocationQuery, results[i]->endLocationTarget);
         }
-        if (results[i]->endLocationQuery != results2[i]->endLocationQuery) {
-            printf("#%d: end location in query is %d but should be %d\n",
-                   i, results[i]->endLocationQuery, results2[i]->endLocationQuery);
+        if (searchType == OPAL_SEARCH_ALIGNMENT) {
+            checkAlignment(query, queryLength, db[i], dbSeqsLengths[i],
+                           *results[i], gapOpen, gapExt, scoreMatrix, alphabetLength);
         }
-        //printf("#%d: score -> %d, end location -> (q: %d, t: %d)\n",
-        //       i, results[i]->score, results[i]->endLocationQuery, results[i]->endLocationTarget);
-
-        checkAlignment(query, queryLength, db[i], dbSeqsLengths[i],
-                       *results[i], gapOpen, gapExt, scoreMatrix, alphabetLength);
     }
 
     printf("Times faster: %lf\n", time2/time1);
