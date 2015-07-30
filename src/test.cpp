@@ -15,14 +15,16 @@ using namespace std;
 void fillRandomly(unsigned char* seq, int seqLength, int alphabetLength);
 int * createSimpleScoreMatrix(int alphabetLength, int match, int mismatch);
 int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int dbLength, int dbSeqLengths[],
-                int gapOpen, int gapExt, int * scoreMatrix, int alphabetLength, OpalSearchResult* results[]);
+                int gapOpen, int gapExt, int matchExt, int * scoreMatrix, int alphabetLength,
+                OpalSearchResult* results[]);
 int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db, int dbLength,
-                    int dbSeqLengths[], int gapOpen, int gapExt, int * scoreMatrix,
+                    int dbSeqLengths[], int gapOpen, int gapExt, int matchExt, int * scoreMatrix,
                     int alphabetLength, OpalSearchResult* results[], const int);
 void printInts(int a[], int aLength);
 int maximumScore(OpalSearchResult* results[], int resultsLength);
 bool checkAlignment(const unsigned char* query, int queryLength, const unsigned char* target, int targetLength,
-                    const OpalSearchResult result, int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength);
+                    const OpalSearchResult result, int gapOpen, int gapExt, int matchExt, int* scoreMatrix,
+                    int alphabetLength);
 
 int main(int argc, char * const argv[]) {
 
@@ -40,6 +42,7 @@ int main(int argc, char * const argv[]) {
     int alphabetLength = 4;
     int gapOpen = 11;
     int gapExt = 1;
+    int matchExt = 1;
 
     // Create random query
     int queryLength = 1000;
@@ -98,7 +101,7 @@ int main(int argc, char * const argv[]) {
         return 1;
     }
     resultCode = opalSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths,
-                                    gapOpen, gapExt, scoreMatrix, alphabetLength, results,
+                                    gapOpen, gapExt, matchExt, scoreMatrix, alphabetLength, results,
                                     searchType, modeCode, OPAL_OVERFLOW_SIMPLE);
     finish = clock();
     double time1 = ((double)(finish-start)) / CLOCKS_PER_SEC;
@@ -126,10 +129,10 @@ int main(int argc, char * const argv[]) {
     }
     if (!strcmp(mode, "SW")) {
         resultCode = calculateSW(query, queryLength, db, dbLength, dbSeqsLengths,
-                                 gapOpen, gapExt, scoreMatrix, alphabetLength, results2);
+                                 gapOpen, gapExt, matchExt, scoreMatrix, alphabetLength, results2);
     } else {
         resultCode = calculateGlobal(query, queryLength, db, dbLength, dbSeqsLengths,
-                                     gapOpen, gapExt, scoreMatrix, alphabetLength, results2, modeCode);
+                                     gapOpen, gapExt, matchExt, scoreMatrix, alphabetLength, results2, modeCode);
     }
     finish = clock();
     double time2 = ((double)(finish-start))/CLOCKS_PER_SEC;
@@ -171,7 +174,7 @@ int main(int argc, char * const argv[]) {
         }
         if (searchType == OPAL_SEARCH_ALIGNMENT) {
             checkAlignment(query, queryLength, db[i], dbSeqsLengths[i],
-                           *results[i], gapOpen, gapExt, scoreMatrix, alphabetLength);
+                           *results[i], gapOpen, gapExt, matchExt, scoreMatrix, alphabetLength);
         }
     }
 
@@ -203,7 +206,7 @@ int* createSimpleScoreMatrix(int alphabetLength, int match, int mismatch) {
 }
 
 int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int dbLength,
-                int dbSeqLengths[], int gapOpen, int gapExt, int * scoreMatrix, int alphabetLength,
+                int dbSeqLengths[], int gapOpen, int gapExt, int matchExt, int * scoreMatrix, int alphabetLength,
                 OpalSearchResult* results[]) {
     int prevHs[queryLength];
     int prevEs[queryLength];
@@ -227,7 +230,8 @@ int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int
                 int E = max(prevHs[r] - gapOpen, prevEs[r] - gapExt);
                 int F = max(uH - gapOpen, uF - gapExt);
                 int score = scoreMatrix[query[r] * alphabetLength + db[seqIdx][c]];
-                int B = (r > 0 && c > 0 && query[r] == db[seqIdx][c] && query[r - 1] == db[seqIdx][c - 1]) ? Me : 0;
+                int B = (r > 0 && c > 0 && query[r] == db[seqIdx][c]
+                         && query[r - 1] == db[seqIdx][c - 1]) ? matchExt : 0;
                 int D = max(max(ulH, ulD + B) + score, 0);
                 int H = max(E, max(F, D));
                 if (H > maxH) {
@@ -262,7 +266,7 @@ int calculateSW(unsigned char query[], int queryLength, unsigned char ** db, int
 }
 
 int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db, int dbLength,
-                    int dbSeqLengths[], int gapOpen, int gapExt, int * scoreMatrix,
+                    int dbSeqLengths[], int gapOpen, int gapExt, int matchExt, int * scoreMatrix,
                     int alphabetLength, OpalSearchResult* results[], const int mode) {
     int prevHs[queryLength];
     int prevEs[queryLength];
@@ -357,7 +361,8 @@ int maximumScore(OpalSearchResult* results[], int resultsLength) {
  * Checks if alignment is correct.
  */
 bool checkAlignment(const unsigned char* query, int queryLength, const unsigned char* target, int targetLength,
-                    const OpalSearchResult result, int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength) {
+                    const OpalSearchResult result, int gapOpen, int gapExt, int matchExt, int* scoreMatrix,
+                    int alphabetLength) {
     /*
     printf("Query: ");
     for (int i = 0; i < queryLength; i++) {
@@ -402,7 +407,7 @@ bool checkAlignment(const unsigned char* query, int queryLength, const unsigned 
                 return false;
             }
             alignScore += scoreMatrix[query[qIdx] * alphabetLength + target[tIdx]]
-                + (prevOperation == OPAL_ALIGN_MATCH ? Me : 0);
+                + (prevOperation == OPAL_ALIGN_MATCH ? matchExt : 0);
             qIdx++; tIdx++; break;
         case OPAL_ALIGN_MISMATCH:
             if (query[qIdx] == target[tIdx]) {

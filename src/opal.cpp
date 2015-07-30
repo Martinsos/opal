@@ -164,7 +164,7 @@ struct CellEH {
 template<class SIMD>
 static int searchDatabaseSW_(unsigned char query[], int queryLength,
                              unsigned char** db, int dbLength, int dbSeqLengths[],
-                             int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+                             int gapOpen, int gapExt, int matchExt, int* scoreMatrix, int alphabetLength,
                              OpalSearchResult* results[], const int searchType, bool calculated[],
                              int overflowMethod) {
 
@@ -174,9 +174,9 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     bool overflowOccured = false;  // True if overflow was detected at least once.
 
     // ----------------------- CHECK ARGUMENTS -------------------------- //
-    // Check if Q, R, Me or scoreMatrix have values too big for used score type
+    // Check if Q, R, matchExt or scoreMatrix have values too big for used score type
     if (gapOpen < LOWER_BOUND || UPPER_BOUND < gapOpen || gapExt < LOWER_BOUND || UPPER_BOUND < gapExt
-        || Me < LOWER_BOUND || Me > UPPER_BOUND) {
+        || matchExt < LOWER_BOUND || matchExt > UPPER_BOUND) {
         return OPAL_ERR_OVERFLOW;
     }
     if (!SIMD::satArthm) {
@@ -193,7 +193,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 return OPAL_ERR_OVERFLOW;
             }
             if (!SIMD::satArthm) {
-                if (score <= LOWER_BOUND/2 || UPPER_BOUND/2 <= score + Me)
+                if (score <= LOWER_BOUND/2 || UPPER_BOUND/2 <= score + matchExt)
                     return OPAL_ERR_OVERFLOW;
             }
         }
@@ -247,7 +247,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     // Q is gap open penalty, R is gap ext penalty, M is match ext bonus.
     __mxxxi Q = SIMD::set1(gapOpen);
     __mxxxi R = SIMD::set1(gapExt);
-    __mxxxi M = SIMD::set1(Me);
+    __mxxxi M = SIMD::set1(matchExt);
 
     int rowsWithImprovement[queryLength];  // Indexes of rows where one of sequences improved score.
 
@@ -547,9 +547,10 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     return 0;
 }
 
-static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char* &currDbSeqPos,
-                                    int &currDbSeqLength, unsigned char** db, int dbSeqLengths[], bool calculated[],
-                                    int &numEndedDbSeqs) {
+static inline bool loadNextSequence(
+    int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx, unsigned char* &currDbSeqPos,
+    int &currDbSeqLength, unsigned char** db, int dbSeqLengths[], bool calculated[],
+    int &numEndedDbSeqs) {
     while (nextDbSeqIdx < dbLength && calculated[nextDbSeqIdx]) {
         nextDbSeqIdx++;
         numEndedDbSeqs++;
@@ -573,7 +574,7 @@ static inline bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDb
  */
 static int searchDatabaseSW(unsigned char query[], int queryLength,
                             unsigned char** db, int dbLength, int dbSeqLengths[],
-                            int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+                            int gapOpen, int gapExt, int matchExt, int* scoreMatrix, int alphabetLength,
                             OpalSearchResult* results[], const int searchType, bool skip[], int overflowMethod) {
     int resultCode = 0;
     // Do buckets only if using buckets overflow method.
@@ -589,18 +590,18 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
         }
         resultCode = searchDatabaseSW_< SimdSW<char> >(
             query, queryLength, db_, dbLength_, dbSeqLengths_,
-            gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
+            gapOpen, gapExt, matchExt, scoreMatrix, alphabetLength, results_,
             searchType, calculated, overflowMethod);
         if (resultCode == OPAL_ERR_OVERFLOW) {
             resultCode = searchDatabaseSW_< SimdSW<short> >(
                 query, queryLength, db_, dbLength_, dbSeqLengths_,
-                gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
+                gapOpen, gapExt, matchExt, scoreMatrix, alphabetLength, results_,
                 searchType, calculated, overflowMethod);
             if (resultCode == OPAL_ERR_OVERFLOW) {
                 resultCode = searchDatabaseSW_< SimdSW<int> >(
                     query, queryLength,
                     db_, dbLength_, dbSeqLengths_,
-                    gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
+                    gapOpen, gapExt, matchExt, scoreMatrix, alphabetLength, results_,
                     searchType, calculated, overflowMethod);
                 if (resultCode != 0)
                     break;
@@ -668,11 +669,11 @@ struct Simd<int> {
 
 
 
-
+// TODO: matchExt is not implemented yet! So it will not work correctly if value is not 0.
 template<class SIMD, int MODE>
 static int searchDatabase_(unsigned char query[], int queryLength,
                            unsigned char** db, int dbLength, int dbSeqLengths[],
-                           int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+                           int gapOpen, int gapExt, int matchExt, int* scoreMatrix, int alphabetLength,
                            OpalSearchResult* results[], const int searchType, bool calculated[], int overflowMethod) {
 
     static const typename SIMD::type LOWER_BOUND = std::numeric_limits<typename SIMD::type>::min();
@@ -1061,7 +1062,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
 template <int MODE>
 static int searchDatabase(unsigned char query[], int queryLength,
                           unsigned char** db, int dbLength, int dbSeqLengths[],
-                          int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+                          int gapOpen, int gapExt, int matchExt, int* scoreMatrix, int alphabetLength,
                           OpalSearchResult* results[], const int searchType, bool skip[], int overflowMethod) {
     int resultCode = 0;
     // Do buckets only if using buckets overflow method.
@@ -1077,17 +1078,17 @@ static int searchDatabase(unsigned char query[], int queryLength,
         }
         resultCode = searchDatabase_< Simd<char>, MODE >
             (query, queryLength, db_, dbLength_, dbSeqLengths_,
-             gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
+             gapOpen, gapExt, matchExt, scoreMatrix, alphabetLength, results_,
              searchType, calculated, overflowMethod);
         if (resultCode == OPAL_ERR_OVERFLOW) {
             resultCode = searchDatabase_< Simd<short>, MODE >
                 (query, queryLength, db_, dbLength_, dbSeqLengths_,
-                 gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
+                 gapOpen, gapExt, matchExt, scoreMatrix, alphabetLength, results_,
                  searchType, calculated, overflowMethod);
             if (resultCode == OPAL_ERR_OVERFLOW) {
                 resultCode = searchDatabase_< Simd<int>, MODE >
                     (query, queryLength, db_, dbLength_, dbSeqLengths_,
-                     gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
+                     gapOpen, gapExt, matchExt, scoreMatrix, alphabetLength, results_,
                      searchType, calculated, overflowMethod);
                 if (resultCode != 0)
                     break; // TODO: this does not make much sense because of buckets, improve it.
@@ -1213,7 +1214,7 @@ static int calculateBottomBandBorderNW(int k, int Q, int T, int Go, int Ge, int 
  * @param T  targetLength
  * @param Go  gapOpen -> non negative penalty for opening of gap.
  * @param Ge  gapExt -> non negative penalty for extension of gap.
- * @param M  Max score from score matrix.
+ * @param M  Max score from score matrix + matchExt -> max awarded score.
  * @return Pair where first is index of bottom diagonal(border), and second is index of top diagonal(border).
  *     Therefore, first value will be in [0, Q - 1], while second will be in [0, T - 1].
  *     Band spans between top and bottom diagonal, including them.
@@ -1301,6 +1302,7 @@ public:
  * @param [in] targetLength
  * @param [in] gapOpen
  * @param [in] gapExt
+ * @param [in] matchExt
  * @param [in] scoreMatrix
  * @param [in] alphabetLength
  * @param [in] scoreLimit  First alignment with score greater/equal than scoreLimit is returned.
@@ -1313,7 +1315,7 @@ public:
  */
 static void findAlignment(
     const unsigned char query[], const int queryLength, const unsigned char target[], const int targetLength,
-    const int gapOpen, const int gapExt, const int* scoreMatrix, const int alphabetLength,
+    const int gapOpen, const int gapExt, const int matchExt, const int* scoreMatrix, const int alphabetLength,
     const int scoreLimit, OpalSearchResult* result, const int mode) {
     /*
     printf("Query: ");
@@ -1332,7 +1334,7 @@ static void findAlignment(
 
     std::pair<int, int> bandBorders = calculateBandBorders(
         scoreLimit, mode, queryLength, targetLength, gapOpen, gapExt,
-        arrayMax(scoreMatrix, alphabetLength * alphabetLength) + Me);
+        arrayMax(scoreMatrix, alphabetLength * alphabetLength) + matchExt);
 
     assert(bandBorders.first >= 0 && bandBorders.first < queryLength);
     assert(bandBorders.second >= 0 && bandBorders.second < targetLength);
@@ -1372,7 +1374,7 @@ static void findAlignment(
             int E = std::max(prevColumn[r].H - gapOpen, prevColumn[r].E - gapExt);
             int F = std::max(uH - gapOpen, uF - gapExt);
             int score = scoreMatrix[query[r] * alphabetLength + target[c]];
-            int B = (r > 0 && c > 0 && (query[r] == target[c]) && (query[r - 1] == target[c - 1])) ? Me : 0;
+            int B = (r > 0 && c > 0 && (query[r] == target[c]) && (query[r - 1] == target[c - 1])) ? matchExt : 0;
             int D = std::max(std::max(ulH, ulD + B) + score, 0);
             H = std::max(E, std::max(F, D));
             /*
@@ -1522,7 +1524,7 @@ static void findAlignment(
 extern int opalSearchDatabase(
     unsigned char query[], int queryLength,
     unsigned char** db, int dbLength, int dbSeqLengths[],
-    int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
+    int gapOpen, int gapExt, int matchExt, int* scoreMatrix, int alphabetLength,
     OpalSearchResult* results[], const int searchType, int mode, int overflowMethod) {
 #if !defined(__SSE4_1__) && !defined(__AVX2__)
     return OPAL_ERR_NO_SIMD_SUPPORT;
@@ -1538,21 +1540,20 @@ extern int opalSearchDatabase(
     }
     if (mode == OPAL_MODE_NW) {
         status = searchDatabase<OPAL_MODE_NW>(
-            query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
+            query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt, matchExt,
             scoreMatrix, alphabetLength, results, searchType, skip, overflowMethod);
     } else if (mode == OPAL_MODE_HW) {
         status = searchDatabase<OPAL_MODE_HW>(
-            query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
+            query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt, matchExt,
             scoreMatrix, alphabetLength, results, searchType, skip, overflowMethod);
     } else if (mode == OPAL_MODE_OV) {
         status = searchDatabase<OPAL_MODE_OV>(
-            query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
+            query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt, matchExt,
             scoreMatrix, alphabetLength, results, searchType, skip, overflowMethod);
     } else if (mode == OPAL_MODE_SW) {
         status = searchDatabaseSW(
-            query, queryLength, db, dbLength, dbSeqLengths,
-            gapOpen, gapExt, scoreMatrix, alphabetLength,
-            results, searchType, skip, overflowMethod);
+            query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt, matchExt,
+            scoreMatrix, alphabetLength, results, searchType, skip, overflowMethod);
     } else {
         status = OPAL_ERR_INVALID_MODE;
     }
@@ -1578,7 +1579,7 @@ extern int opalSearchDatabase(
                 OpalSearchResult result;
                 findAlignment(
                     alignQuery, alignQueryLength, alignTarget, alignTargetLength,
-                    gapOpen, gapExt, scoreMatrix, alphabetLength,
+                    gapOpen, gapExt, matchExt, scoreMatrix, alphabetLength,
                     results[i]->score, &result, mode);
                 //printf("%d %d\n", results[i]->score, result.score);
                 if (results[i]->score != result.score) {
@@ -1613,7 +1614,7 @@ extern int opalSearchDatabase(
 
 extern int opalSearchDatabaseCharSW(
     unsigned char query[], int queryLength, unsigned char** db, int dbLength,
-    int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
+    int dbSeqLengths[], int gapOpen, int gapExt, int matchExt, int* scoreMatrix,
     int alphabetLength, OpalSearchResult* results[]) {
 #if !defined(__SSE4_1__) && !defined(__AVX2__)
     return OPAL_ERR_NO_SIMD_SUPPORT;
@@ -1623,7 +1624,7 @@ extern int opalSearchDatabaseCharSW(
         calculated[i] = false;
     }
     int resultCode = searchDatabaseSW_< SimdSW<char> >(
-        query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
+        query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt, matchExt,
         scoreMatrix, alphabetLength, results, OPAL_SEARCH_SCORE, calculated,
         OPAL_OVERFLOW_SIMPLE);
     for (int i = 0; i < dbLength; i++) {

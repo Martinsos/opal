@@ -9,8 +9,6 @@
  *  - works for SSE4.1 and higher
  *************************************************************************************/
 
-const int Me = 1;  // TODO: make this a variable, this is just dummy value for now.
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -111,6 +109,8 @@ extern "C" {
      * @param [in] dbSeqLengths Array of lengths of database sequences.
      * @param [in] gapOpen  Non-negative penalty for gap opening.
      * @param [in] gapExt  Non-negative penalty for gap extension.
+     * @param [in] matchExt  Non-negative bonus for match extension.
+     *     If there is a match with match just before it, matchExt bonus is added to it.
      * @param [in] scoreMatrix Matrix of dimensions (alphabetLength, alphabetLength).
      *     It is array of length alphabetLength * alphabetLength, where memory is organized
      *     row by row: row0row1row2...rowN.
@@ -151,7 +151,7 @@ extern "C" {
      */
     int opalSearchDatabase(
         unsigned char query[], int queryLength, unsigned char* db[], int dbLength,
-        int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
+        int dbSeqLengths[], int gapOpen, int gapExt, int matchExt, int* scoreMatrix,
         int alphabetLength, OpalSearchResult* results[],
         const int searchType, int mode, int overflowMethod);
 
@@ -163,7 +163,7 @@ extern "C" {
      */
     int opalSearchDatabaseCharSW(
         unsigned char query[], int queryLength, unsigned char** db, int dbLength,
-        int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
+        int dbSeqLengths[], int gapOpen, int gapExt, int matchExt, int* scoreMatrix,
         int alphabetLength, OpalSearchResult* results[]);
 
 #ifdef __cplusplus

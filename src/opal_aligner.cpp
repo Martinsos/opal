@@ -12,7 +12,8 @@
 
 using namespace std;
 
-bool readFastaSequences(FILE* &file, unsigned char* alphabet, int alphabetLength, vector< vector<unsigned char> >* seqs);
+bool readFastaSequences(FILE* &file, unsigned char* alphabet, int alphabetLength,
+                        vector< vector<unsigned char> >* seqs);
 void printAlignment(const unsigned char* query, const int queryLength,
                     const unsigned char* target, const int targetLength,
                     const OpalSearchResult result, const unsigned char* alphabet);
@@ -20,6 +21,7 @@ void printAlignment(const unsigned char* query, const int queryLength,
 int main(int argc, char * const argv[]) {
     int gapOpen = 3;
     int gapExt = 1;
+    int matchExt = 0;
     ScoreMatrix scoreMatrix;
 
     //----------------------------- PARSE COMMAND LINE ------------------------//
@@ -30,11 +32,12 @@ int main(int argc, char * const argv[]) {
     char mode[16] = "SW";
     int searchType = OPAL_SEARCH_SCORE;
     int option;
-    while ((option = getopt(argc, argv, "a:o:e:m:f:x:s")) >= 0) {
+    while ((option = getopt(argc, argv, "a:o:e:b:m:f:x:s")) >= 0) {
         switch (option) {
         case 'a': strcpy(mode, optarg); break;
         case 'o': gapOpen = atoi(optarg); break;
         case 'e': gapExt = atoi(optarg); break;
+        case 'b': matchExt = atoi(optarg); break;
         case 'm': scoreMatrixName = string(optarg); break;
         case 'f': scoreMatrixFileGiven = true; strcpy(scoreMatrixFilepath, optarg); break;
         case 's': silent = true; break;
@@ -45,9 +48,11 @@ int main(int argc, char * const argv[]) {
         fprintf(stderr, "\n");
         fprintf(stderr, "Usage: opal_aligner [options...] <query.fasta> <db.fasta>\n");
         fprintf(stderr, "Options:\n");
-        fprintf(stderr, "  -g N  N is gap opening penalty. [default: 3]\n");
+        fprintf(stderr, "  -o N  N is gap opening penalty. [default: 3]\n");
         fprintf(stderr, "  -e N  N is gap extension penalty. [default: 1]\n"
                         "    Gap of length n will have penalty of g + (n - 1) * e.\n");
+        fprintf(stderr, "  -b N  N is match extension bonus. [default: 0]\n"
+                        "    This bonus is awarded to match following another match.\n");
         fprintf(stderr, "  -m Blosum50  Score matrix to be used. [default: Blosum50]\n");
         fprintf(stderr, "  -f FILE  FILE contains score matrix and some additional data. Overrides -m.\n");
         fprintf(stderr, "  -s  If set, there will be no score output (silent mode).\n");
@@ -156,7 +161,7 @@ int main(int argc, char * const argv[]) {
         fflush(stdout);
         clock_t start = clock();
         int resultCode = opalSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
-                                             gapOpen, gapExt, scoreMatrix.getMatrix(), alphabetLength,
+                                            gapOpen, gapExt, matchExt, scoreMatrix.getMatrix(), alphabetLength,
                                              results, searchType, modeCode, OPAL_OVERFLOW_BUCKETS);
         if (resultCode) {
             printf("\nDatabase search failed with error code: %d\n", resultCode);
