@@ -1375,7 +1375,7 @@ static void findAlignment(
             int F = std::max(uH - gapOpen, uF - gapExt);
             int score = scoreMatrix[query[r] * alphabetLength + target[c]];
             int B = (r > 0 && c > 0 && (query[r] == target[c]) && (query[r - 1] == target[c - 1])) ? matchExt : 0;
-            int D = std::max(std::max(ulH, ulD + B) + score, 0);
+            int D = std::max(ulH, ulD + B) + score;
             H = std::max(E, std::max(F, D));
             /*
             printf("E: %d ", E);
