@@ -503,7 +503,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                     }
                 }
             }
-            // Reset previous columns (Es and Hs), Pb and maxH
+            // Reset previous columns (Es, Hs and Ds), Pb and maxH
             __mxxxi resetMaskPacked = _mmxxx_load_si((__mxxxi const*)resetMask);
             if (SIMD::negRange) {
                 for (int i = 0; i < queryLength; i++) {
@@ -686,13 +686,14 @@ static int searchDatabase_(unsigned char query[], int queryLength,
 
     // ----------------------- CHECK ARGUMENTS -------------------------- //
     // Check if Q, R or scoreMatrix have values too big for used score type
-    if (gapOpen < LOWER_BOUND || UPPER_BOUND < gapOpen || gapExt < LOWER_BOUND || UPPER_BOUND < gapExt) {
-        return 1;
+    if (gapOpen < LOWER_BOUND || UPPER_BOUND < gapOpen || gapExt < LOWER_BOUND || UPPER_BOUND < gapExt
+        || matchExt < LOWER_BOUND || matchExt > UPPER_BOUND) {
+        return OPAL_ERR_OVERFLOW;
     }
     if (!SIMD::satArthm) {
         // These extra limits are enforced so overflow could be detected more efficiently
         if (gapOpen <= LOWER_BOUND/2 || UPPER_BOUND/2 <= gapOpen || gapExt <= LOWER_BOUND/2 || UPPER_BOUND/2 <= gapExt) {
-            return 1;
+            return OPAL_ERR_OVERFLOW;
         }
     }
 
@@ -700,11 +701,11 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         for (int c = 0; c < alphabetLength; c++) {
             int score = scoreMatrix[r * alphabetLength + c];
             if (score < LOWER_BOUND || UPPER_BOUND < score) {
-                return 1;
+                return OPAL_ERR_OVERFLOW;
             }
             if (!SIMD::satArthm) {
-                if (score <= LOWER_BOUND/2 || UPPER_BOUND/2 <= score)
-                    return 1;
+                if (score <= LOWER_BOUND/2 || UPPER_BOUND/2 <= score + matchExt)
+                    return OPAL_ERR_OVERFLOW;
             }
         }
 
@@ -739,13 +740,23 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                 shortestDbSeqLength = currDbSeqsLengths[i];
         }
 
-    // Q is gap open penalty, R is gap ext penalty.
+    // Q is gap open penalty, R is gap ext penalty, M is match ext bonus.
     const __mxxxi Q = SIMD::set1(gapOpen);
     const __mxxxi R = SIMD::set1(gapExt);
+    const __mxxxi M = SIMD::set1(matchExt);
 
-    // Previous H column (array), previous E column (array), previous F, all signed short
+    __mxxxi P[alphabetLength];
+    __mxxxi Pb[alphabetLength];
+    __mxxxi prevPb[alphabetLength];
+    // Set prevPb to all zeroes -> border conditions.
+    for (unsigned char letter = 0; letter < alphabetLength; letter++) {
+        prevPb[letter] = ZERO_SIMD;
+    }
+
+    // Previous H column, previous E column, previous D column.
     __mxxxi prevHs[queryLength];
     __mxxxi prevEs[queryLength];
+    __mxxxi prevDs[queryLength];
     // Initialize all values
     for (int r = 0; r < queryLength; r++) {
         if (MODE == OPAL_MODE_OV)
@@ -757,7 +768,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                 prevHs[r] = SIMD::sub(prevHs[r-1], R);
         }
 
-        prevEs[r] = LOWER_SCORE_BOUND_SIMD;
+        prevEs[r] = prevDs[r] = LOWER_SCORE_BOUND_SIMD;
     }
 
     // u - up, ul - up left
@@ -776,21 +787,27 @@ static int searchDatabase_(unsigned char query[], int queryLength,
     while (numEndedDbSeqs < dbLength) {
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
-        __mxxxi P[alphabetLength];
-        typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+        typename SIMD::type P_unpacked[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+        typename SIMD::type Pb_unpacked[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
         for (unsigned char letter = 0; letter < alphabetLength; letter++) {
             int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 unsigned char* dbSeqPos = currDbSeqsPos[i];
-                if (dbSeqPos != 0)
-                    profileRow[i] = (typename SIMD::type)scoreMatrixRow[*dbSeqPos];
+                if (dbSeqPos != 0) {
+                    P_unpacked[i] = (typename SIMD::type)scoreMatrixRow[*dbSeqPos];
+                    // All 0-s if no match, and all 1-s if match.
+                    Pb_unpacked[i] = (typename SIMD::type)(letter == *dbSeqPos ? -1 : 0);
+                }
             }
-            P[letter] = _mmxxx_load_si((__mxxxi const*)profileRow);
+            P[letter] = _mmxxx_load_si((__mxxxi const*)P_unpacked);
+            Pb[letter] = _mmxxx_load_si((__mxxxi const*)Pb_unpacked);
         }
         // ---------------------------------------------------------------------- //
 
-        // u - up
+        // u - up, ul - upper left
         __mxxxi uF = LOWER_SCORE_BOUND_SIMD;
+        __mxxxi ulD = LOWER_SCORE_BOUND_SIMD;
+        __mxxxi ulPb = ZERO_SIMD;
 
         // Database sequence has fixed start and end only in NW
         if (MODE == OPAL_MODE_NW) {
@@ -832,10 +849,15 @@ static int searchDatabase_(unsigned char query[], int queryLength,
             __mxxxi F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R)); // F could overflow
             minF = SIMD::min(minF, F); // For overflow detection
 
+             // Calculate B = (Pb & ulPb) & M
+            __mxxxi B = _mmxxx_and_si(_mmxxx_and_si(Pb[query[r]], ulPb), M);
+
+            // Calculate D = max(ulD + B, ulH) + P
+            // D is max score if we arrive to this cell from upper left cell.
+            __mxxxi D = SIMD::add(SIMD::max(SIMD::add(ulD, B), ulH), P[query[r]]);
+
             // Calculate H
-            H = SIMD::max(F, E);
-            __mxxxi ulH_P = SIMD::add(ulH, P[query[r]]);
-            H = SIMD::max(H, ulH_P); // H could overflow
+            H = SIMD::max(SIMD::max(F, E), D);
 
             maxH = SIMD::max(maxH, H); // update best score in column
 
@@ -843,8 +865,11 @@ static int searchDatabase_(unsigned char query[], int queryLength,
             uF = F;
             uH = H;
             ulH = prevHs[r];
+            ulD = prevDs[r];
+            ulPb = prevPb[query[r]];
 
             // Update prevHs, prevEs in advance for next column
+            prevDs[r] = D;
             prevEs[r] = E;
             prevHs[r] = H;
         }
@@ -1007,11 +1032,13 @@ static int searchDatabase_(unsigned char query[], int queryLength,
             const __mxxxi resetMaskPacked = _mmxxx_load_si((__mxxxi const*)resetMask);
             const __mxxxi setMaskPacked = _mmxxx_load_si((__mxxxi const*)setMask);
 
-            // Set prevEs ended channels to LOWER_SCORE_BOUND
+            // Set prevEs and prevDs ended channels to LOWER_SCORE_BOUND
             const __mxxxi maskedLowerScoreBoundSimd = _mmxxx_and_si(setMaskPacked, LOWER_SCORE_BOUND_SIMD);
             for (int r = 0; r < queryLength; r++) {
                 prevEs[r] = _mmxxx_and_si(prevEs[r], resetMaskPacked);
                 prevEs[r] = SIMD::add(prevEs[r], maskedLowerScoreBoundSimd);
+                prevDs[r] = _mmxxx_and_si(prevDs[r], resetMaskPacked);
+                prevDs[r] = SIMD::add(prevDs[r], maskedLowerScoreBoundSimd);
             }
 
             // Set prevHs
@@ -1024,6 +1051,11 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                         prevHs[r] = SIMD::add(prevHs[r], _mmxxx_and_si(setMaskPacked, SIMD::sub(prevHs[r-1], R)));
                     }
                 }
+            }
+
+            // Reset Pb.
+            for (unsigned char letter = 0; letter < alphabetLength; letter++) {
+                Pb[letter] = _mmxxx_and_si(Pb[letter], resetMaskPacked);
             }
 
             // Set ulH and uH if NW
@@ -1047,6 +1079,11 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                     currDbSeqsPos[i]++;
         }
         // ---------------------------------------------------------------------- //
+
+        // Store current Pb for the next column.
+        for (unsigned char letter = 0; letter < alphabetLength; letter++) {
+            prevPb[letter] = Pb[letter];
+        }
     }
 
     if (overflowOccured) {

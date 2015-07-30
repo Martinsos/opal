@@ -270,6 +270,7 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
                     int alphabetLength, OpalSearchResult* results[], const int mode) {
     int prevHs[queryLength];
     int prevEs[queryLength];
+    int prevDs[queryLength];
 
     const int LOWER_SCORE_BOUND = INT_MIN + gapExt;
 
@@ -279,6 +280,7 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
             // Query has fixed start and end if not OV
             prevHs[r] = mode == OPAL_MODE_OV ? 0 : -1 * gapOpen - r * gapExt;
             prevEs[r] = LOWER_SCORE_BOUND;
+            prevDs[r] = LOWER_SCORE_BOUND;
         }
 
         int maxH = INT_MIN;
@@ -288,8 +290,8 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
         int H = INT_MIN;
         int targetLength = dbSeqLengths[seqIdx];
         for (int c = 0; c < targetLength; c++) {
-            int uF, uH, ulH;
-            uF = LOWER_SCORE_BOUND;
+            int uF, uH, ulH, ulD;
+            uF = ulD = LOWER_SCORE_BOUND;
             if (mode == OPAL_MODE_NW) { // Database sequence has fixed start and end only in NW
                 uH = -1 * gapOpen - c * gapExt;
                 ulH = uH + gapExt;
@@ -303,7 +305,10 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
                 int E = max(prevHs[r] - gapOpen, prevEs[r] - gapExt);
                 int F = max(uH - gapOpen, uF - gapExt);
                 int score = scoreMatrix[query[r] * alphabetLength + db[seqIdx][c]];
-                H = max(E, max(F, ulH + score));
+                int B = (r > 0 && c > 0 && query[r] == db[seqIdx][c]
+                         && query[r - 1] == db[seqIdx][c - 1]) ? matchExt : 0;
+                int D = max(ulH, ulD + B) + score;
+                H = max(E, max(F, D));
 
                 if (mode == OPAL_MODE_OV && c == targetLength - 1) {
                     if (H > maxH) {
@@ -316,9 +321,11 @@ int calculateGlobal(unsigned char query[], int queryLength, unsigned char ** db,
                 uF = F;
                 uH = H;
                 ulH = prevHs[r];
+                ulD = prevDs[r];
 
                 prevHs[r] = H;
                 prevEs[r] = E;
+                prevDs[r] = D;
             }
 
             if (H > maxH) {
