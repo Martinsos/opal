@@ -28,6 +28,7 @@ Opal is written for C++11 standard, so you should make sure that you compile it 
 
 ```
 ...
+// Basic parameters
 int alphabetLength = 4;
 int gapOpen = 3;
 int gapExt = 1;
@@ -38,9 +39,11 @@ int scoreMatrix[16] = {
     0, -1, -10, 4
 };
 
+// Query
 int queryLength = 10;
 unsigned char query[10] = {0,1,3,2,1,0,3,0,1,1};
 
+// Database
 int dbLength = 4;
 unsigned char dbSeq1[14] = {1,3,2,3,0,0,1,0,2,2,1,2,3,2};
 unsigned char dbSeq2[12] = {2,1,1,3,2,0,0,2,2,0,2,1};
@@ -49,10 +52,18 @@ unsigned char dbSeq4[9] = {2,3,3,3,1,1,2,2,0};
 unsigned char* db[4] = { dbSeq1, dbSeq2, dbSeq3, dbSeq4 };
 int dbSeqsLengths[4] = {14, 12, 13, 9};
 
+// Results for each sequence in database
 OpalSearchResult results[4];
+for (int i = 0; i < 4; i++) {
+    opalInitSearchResult(results[i]);
+}
+
+// Do calculation!
 int resultCode = opalSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths,
                                     gapOpen, gapExt, scoreMatrix, alphabetLength, results,
                                     OPAL_MODE_SW, OPAL_OVERFLOW_BUCKETS);
+
+// Print scores
 printf("%d %d %d %d\n", results[0].score, results[1].score, results[2].score, results[3].score);
 ...
 ```
