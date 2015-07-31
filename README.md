@@ -32,6 +32,7 @@ Opal is written for C++11 standard, so you should make sure that you compile it 
 int alphabetLength = 4;
 int gapOpen = 3;
 int gapExt = 1;
+int matchExt = 0;
 int scoreMatrix[16] = {
     2, -1, -3, 0,
     -1, 4, -5, -1,
@@ -60,7 +61,7 @@ for (int i = 0; i < 4; i++) {
 
 // Do calculation!
 int resultCode = opalSearchDatabase(query, queryLength, db, dbLength, dbSeqsLengths,
-                                    gapOpen, gapExt, scoreMatrix, alphabetLength, results,
+                                    gapOpen, gapExt, matchExt, scoreMatrix, alphabetLength, results,
                                     OPAL_MODE_SW, OPAL_OVERFLOW_BUCKETS);
 
 // Print scores
