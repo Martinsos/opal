@@ -513,17 +513,32 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
             query, queryLength, db_, dbLength_, dbSeqLengths_,
             gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
             searchType, calculated, overflowMethod);
+        for (int i = 0; i < dbLength_; i++) {
+            if (calculated[i] && results_[i]->precision == OPAL_PREC_NULL) {
+                results_[i]->precision = OPAL_PREC_8;
+            }
+        }
         if (resultCode == OPAL_ERR_OVERFLOW) {
             resultCode = searchDatabaseSW_< SimdSW<short> >(
                 query, queryLength, db_, dbLength_, dbSeqLengths_,
                 gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
                 searchType, calculated, overflowMethod);
+            for (int i = 0; i < dbLength_; i++) {
+                if (calculated[i] && results_[i]->precision == OPAL_PREC_NULL) {
+                    results_[i]->precision = OPAL_PREC_16;
+                }
+            }
             if (resultCode == OPAL_ERR_OVERFLOW) {
                 resultCode = searchDatabaseSW_< SimdSW<int> >(
                     query, queryLength,
                     db_, dbLength_, dbSeqLengths_,
                     gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
                     searchType, calculated, overflowMethod);
+                for (int i = 0; i < dbLength_; i++) {
+                    if (calculated[i] && results_[i]->precision == OPAL_PREC_NULL) {
+                        results_[i]->precision = OPAL_PREC_32;
+                    }
+                }
                 if (resultCode != 0)
                     break;
             }
@@ -1552,6 +1567,7 @@ extern void opalInitSearchResult(OpalSearchResult* result) {
     result->endLocationTarget = result->endLocationQuery = -1;
     result->alignment = NULL;
     result->alignmentLength = 0;
+    result->precision = OPAL_PREC_NULL;
 }
 
 extern int opalSearchResultIsEmpty(const OpalSearchResult result) {

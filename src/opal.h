@@ -39,6 +39,12 @@ extern "C" {
 #define OPAL_ALIGN_INS 2  //!< Insertion to query (deletion from target).
 #define OPAL_ALIGN_MISMATCH 3  //!< Mismatch.
 
+// Precisions
+#define OPAL_PREC_8 0
+#define OPAL_PREC_16 1
+#define OPAL_PREC_32 2
+#define OPAL_PREC_NULL 4
+
     /**
      * Contains score and alignment information.
      * If there are multiple possible alignments, one whose end
@@ -71,6 +77,9 @@ extern "C" {
          */
         unsigned char* alignment; //!< NULL if there is no alignment.
         int alignmentLength; //!< 0 if there is no alignment.
+        // Precision that was used to calculate the correct score.
+        // Will be OPAL_PREC_8, OPAL_PREC_16 or OPAL_PREC_32. Initially set to OPAL_PREC_NULL.
+        int precision;
     };
 
     /**

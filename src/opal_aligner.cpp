@@ -122,6 +122,10 @@ int main(int argc, char * const argv[]) {
     bool wholeDbRead = false;
     int dbTotalNumResidues = 0;  // Sum of lengths of all database sequences.
     int dbTotalLength = 0;  // Number of sequences in the database.
+    int prec8, prec16, prec32; // Number of sequences in database that were calculated with certain precision.
+    prec8 = prec16 = prec32 = 0;
+    int score8, score16, score32; // Number of sequences in database that have score that fits in N bits.
+    score8 = score16 = score32 = 0;
     while (!wholeDbRead) {
         vector< vector<unsigned char> >* dbSequences = new vector< vector<unsigned char> >();
         printf("\nReading database fasta file...\n");
@@ -189,6 +193,17 @@ int main(int argc, char * const argv[]) {
         }
 
         for (int i = 0; i < dbLength; i++) {
+            switch (results[i]->precision) {
+            case OPAL_PREC_8: prec8++; break;
+            case OPAL_PREC_16: prec16++; break;
+            case OPAL_PREC_32: prec32++; break;
+            }
+            if (results[i]->score < CHAR_MAX) score8++;
+            else if (results[i]->score < SHRT_MAX) score16++;
+            else if (results[i]->score < INT_MAX) score32++;
+        }
+
+        for (int i = 0; i < dbLength; i++) {
             if (results[i]->alignment) {
                 free(results[i]->alignment);
             }
@@ -200,32 +215,15 @@ int main(int argc, char * const argv[]) {
         delete dbSequences;
     }
 
-    printf("\nCpu time of searching: %.2lf\n", cpuTime);
+    // TODO: print number of seqs for each precision.
+    printf("Precision used: 8-bit: %d, 16-bit: %d, 32-bit: %d\n", prec8, prec16, prec32);
+    printf("Scores: 8-bit: %d, 16-bit: %d, 32-bit: %d\n", score8, score16, score32);
+
+    printf("\nCpu time of searching: %.2lfs\n", cpuTime);
     if (searchType != OPAL_SEARCH_ALIGNMENT) {
         printf("GCUPS (giga cell updates per second): %.2lf\n",
                dbTotalNumResidues / 1000000000.0 * queryLength / cpuTime);
     }
-
-    // Print this statistics only for SW because they are not valid for other modes.
-    /*   if (!(strcmp(mode, "SW"))) {
-        int for8, for16, for32;
-        for8 = for16 = for32 = 0;
-        double averageScore = 0;
-        for (int i = 0; i < dbLength; i++) {
-            averageScore += (double)scores[i] / dbLength;
-            if (scores[i] < CHAR_MAX)
-                for8++;
-            else if (scores[i] < SHRT_MAX)
-                for16++;
-            else
-                for32++;
-        }
-        printf("\nDatabase statistics:\n");
-        printf("\tFor 8  (< %10d): %8d\n", CHAR_MAX, for8);
-        printf("\tFor 16 (< %10d): %8d\n", SHRT_MAX, for16);
-        printf("\tFor 32 (< %10d): %8d\n",  INT_MAX, for32);
-        printf("\tAverage score: %lf\n", averageScore);
-        }*/
 
     fclose(dbFile);
     // Free allocated space
