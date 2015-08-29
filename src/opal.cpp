@@ -509,6 +509,7 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
         for (int i = 0; i < dbLength_; i++) {
             calculated[i] = skip ? skip[i] : false;
         }
+
         resultCode = searchDatabaseSW_< SimdSW<char> >(
             query, queryLength, db_, dbLength_, dbSeqLengths_,
             gapOpen, gapExt, scoreMatrix, alphabetLength, results_,

@@ -6,6 +6,7 @@
 #include <ctime>
 #include <string>
 #include <climits>
+#include <algorithm>
 
 #include "opal.h"
 #include "ScoreMatrix.hpp"
@@ -16,6 +17,16 @@ bool readFastaSequences(FILE* &file, unsigned char* alphabet, int alphabetLength
 void printAlignment(const unsigned char* query, const int queryLength,
                     const unsigned char* target, const int targetLength,
                     const OpalSearchResult result, const unsigned char* alphabet);
+struct DbSeq {
+    DbSeq (unsigned char* seq_, int length_, int score_) : seq(seq_), length(length_), score(score_) {}
+    unsigned char* seq;
+    int length;
+    int score;
+};
+
+bool dbSeqCompare (DbSeq a, DbSeq b) {
+    return a.score < b.score;
+}
 
 int main(int argc, char * const argv[]) {
     int gapOpen = 3;
@@ -156,10 +167,30 @@ int main(int argc, char * const argv[]) {
             results[i] = new OpalSearchResult;
             opalInitSearchResult(results[i]);
         }
+
+        int resultCode;
+
+        // -------------- SORT DATABASE BY SCORE --------------- //
+        printf("Sorting database by score\n");
+        resultCode = opalSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
+                                            gapOpen, gapExt, scoreMatrix.getMatrix(), alphabetLength,
+                                            results, searchType, modeCode, OPAL_OVERFLOW_BUCKETS);
+        vector<DbSeq>* sequences = new vector<DbSeq>();
+        for (int i = 0; i < dbLength; i++) {
+            sequences->push_back(DbSeq(db[i], dbSeqLengths[i], results[i]->score));
+        }
+        std::sort(sequences->begin(), sequences->end(), dbSeqCompare);
+        for (int i = 0; i < dbLength; i++) {
+            db[i] = (*sequences)[i].seq;
+            dbSeqLengths[i] = (*sequences)[i].length;
+            opalInitSearchResult(results[i]);
+        }
+        // ---------------------------------------------------------- //
+
         printf("\nComparing query to database...");
         fflush(stdout);
         clock_t start = clock();
-        int resultCode = opalSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
+        resultCode = opalSearchDatabase(query, queryLength, db, dbLength, dbSeqLengths,
                                              gapOpen, gapExt, scoreMatrix.getMatrix(), alphabetLength,
                                              results, searchType, modeCode, OPAL_OVERFLOW_BUCKETS);
         if (resultCode) {
