@@ -509,7 +509,6 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
         for (int i = 0; i < dbLength_; i++) {
             calculated[i] = skip ? skip[i] : false;
         }
-
         resultCode = searchDatabaseSW_< SimdSW<char> >(
             query, queryLength, db_, dbLength_, dbSeqLengths_,
             gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
@@ -519,7 +518,7 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
                 results_[i]->precision = OPAL_PREC_8;
             }
         }
-        if (resultCode == OPAL_ERR_OVERFLOW) {
+        if (true || resultCode == OPAL_ERR_OVERFLOW) {
             resultCode = searchDatabaseSW_< SimdSW<short> >(
                 query, queryLength, db_, dbLength_, dbSeqLengths_,
                 gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
