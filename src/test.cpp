@@ -40,12 +40,12 @@ int main(int argc, char * const argv[]) {
     srand(42);
 
     int alphabetLength = 4;
-    int gapOpen = 11;
+    int gapOpen = 1;
     int gapExt = 1;
     int matchExt = 1;
 
     // Create random query
-    int queryLength = 1000;
+    int queryLength = 200;
     unsigned char query[queryLength];
     fillRandomly(query, queryLength, alphabetLength);
 
@@ -54,7 +54,7 @@ int main(int argc, char * const argv[]) {
     unsigned char * db[dbLength];
     int dbSeqsLengths[dbLength];
     for (int i = 0; i < dbLength; i++) {
-        dbSeqsLengths[i] = 800 + rand() % 4000;
+        dbSeqsLengths[i] = 400 + rand() % 800;
         db[i] = new unsigned char[dbSeqsLengths[i]];
         fillRandomly(db[i], dbSeqsLengths[i], alphabetLength);
     }
@@ -71,7 +71,7 @@ int main(int argc, char * const argv[]) {
     */
 
     // Create score matrix
-    int * scoreMatrix = createSimpleScoreMatrix(alphabetLength, 3, -1);
+    int * scoreMatrix = createSimpleScoreMatrix(alphabetLength, 1, -1);
     /*int* scoreMatrix = ScoreMatrix::getBlosum50().getMatrix();
     int alphabetLength = ScoreMatrix::getBlosum50().getAlphabetLength();
     int gapOpen = 3;
@@ -433,8 +433,12 @@ bool checkAlignment(const unsigned char* query, int queryLength, const unsigned 
 
         prevOperation = result.alignment[i];
     }
+    if (result.alignmentLength == 0) {
+        qIdx = tIdx = 0;
+    }
+
     if (qIdx - 1 != result.endLocationQuery || tIdx - 1 != result.endLocationTarget) {
-        printf("Alignment ended at (%d, %d) instead of (%d, %d)!\n",
+        printf("Alignment ended at (%d, %d), should be (%d, %d)!\n",
                qIdx - 1, tIdx - 1, result.endLocationQuery, result.endLocationTarget);
         return false;
     }
