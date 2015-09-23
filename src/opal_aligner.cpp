@@ -88,6 +88,7 @@ int main(int argc, char * const argv[]) {
     unsigned char* alphabet = scoreMatrix.getAlphabet();
     int alphabetLength = scoreMatrix.getAlphabetLength();
 
+    printf("Alphabet length: %d\n", alphabetLength);
 
     // Detect mode
     int modeCode;

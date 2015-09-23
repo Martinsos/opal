@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <limits>
 #include <vector>
+#include <ctime>
 
 extern "C" {
 #include <immintrin.h> // AVX2 and lower
@@ -79,6 +80,9 @@ typedef __m128i __mxxxi;
 #define _mmxxx_cmpgt_epi32 _mm_cmpgt_epi32
 
 #endif
+
+static clock_t start;
+static double timeQP, timeCore, timeHousehold;
 
 
 //------------------------------------ SIMD PARAMETERS ---------------------------------//
@@ -254,8 +258,9 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
     // For each column
     while (numEndedDbSeqs < dbLength) {
+        start = clock();
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
-        // TODO: Rognes uses pshufb here, I don't know how/why?
+        // TODO: Rognes uses pshufb (shuffle) here, I don't know how/why?
         typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
         for (unsigned char letter = 0; letter < alphabetLength; letter++) {
             int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
@@ -267,6 +272,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             P[letter] = _mmxxx_load_si((__mxxxi const*)profileRow);
         }
         // ---------------------------------------------------------------------- //
+        timeQP += ((double)(clock() - start)) / CLOCKS_PER_SEC;
 
         // Previous cells: u - up, l - left, ul - up left
         __mxxxi uF, uH, ulH;
@@ -276,6 +282,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
         int rowsWithImprovementLength = 0;
 
+        start = clock();
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
             // Calculate E = max(lH-Q, lE-R)
@@ -326,6 +333,9 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             // Also, all scores except ulH_P certainly have value < 0
         }
         // ---------------------------------------------------------------------- //
+        timeCore += ((double)(clock() - start)) / CLOCKS_PER_SEC;
+
+        start = clock();
 
         for (int seqIdx = 0; seqIdx < SIMD::numSeqs; seqIdx++) {
             currDbSeqsLengths[seqIdx] -= currDbSeqsLengths[seqIdx] > 0;
@@ -461,6 +471,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 currDbSeqsPos[i] += (currDbSeqsPos[i] != 0);
         }
         // ---------------------------------------------------------------------- //
+        timeHousehold += ((double)(clock() - start)) / CLOCKS_PER_SEC;
     }
 
     if (overflowOccured) {
@@ -497,6 +508,7 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
                             unsigned char** db, int dbLength, int dbSeqLengths[],
                             int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
                             OpalSearchResult* results[], const int searchType, bool skip[], int overflowMethod) {
+    timeQP = timeCore = timeHousehold = 0;
     int resultCode = 0;
     // Do buckets only if using buckets overflow method.
     const int chunkSize = overflowMethod == OPAL_OVERFLOW_BUCKETS ? 1024 : dbLength;
@@ -544,6 +556,12 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
             }
         }
     }
+
+    printf("\n");
+    printf("Building query profile: %lf s\n", timeQP);
+    printf("Core loop: %lf s\n", timeCore);
+    printf("House keeping: %lf s\n", timeHousehold);
+    printf("\n");
 
     delete[] calculated;
     return resultCode;
