@@ -1,5 +1,7 @@
 # Opal
 
+**This work has been supported in part by Croatian Science Fundation under the project UIP-11-2013-7353**
+
 Opal (ex Swimd) is SIMD C/C++ library for massive optimal sequence alignment.
 Opal is implemented mainly by Rognes's "Faster Smith-Waterman database searches with inter-sequence SIMD parallelisation". 
 Main difference is that Opal offers support for AVX2 and 4 alignment modes instead of just Smith-Waterman.
