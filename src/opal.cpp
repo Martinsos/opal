@@ -118,7 +118,7 @@ struct Simd<int, MinMax::relative> {
 #elif defined(__SSE4_1__)
 
 extern "C" {
-#include <smmintrin.h> // AVX2 and lower
+#include <smmintrin.h> // SSE4.1 and lower
 }
 
 const int SIMD_REG_SIZE = 128;
@@ -199,8 +199,108 @@ struct Simd<int, MinMax::relative> {
     static inline void store(type* mem, const vector& a) { _mm_store_si128((vector*) mem, a); }
 };
 
+#elif defined(__ARM_NEON)
+
+extern "C" {
+#include <arm_neon.h> // ARM NEON
+}
+
+const int SIMD_REG_SIZE = 128;
+
+template<>
+struct Simd<char, MinMax::absolute> {
+    typedef int8_t type; //!< Type that will be used for score
+    typedef int8x16_t vector;
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
+    static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
+    static const bool negRange = true; //!< True if it uses negative range for score representation, goes with saturation
+    static inline vector add(const vector& a, const vector& b) { return vqaddq_s8(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return vqsubq_s8(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return vreinterpretq_s8_u8(vminq_u8(vreinterpretq_u8_s8(a), vreinterpretq_u8_s8(b))); }
+    static inline vector max(const vector& a, const vector& b) { return vreinterpretq_s8_u8(vmaxq_u8(vreinterpretq_u8_s8(a), vreinterpretq_u8_s8(b))); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return vreinterpretq_s8_u8(vcgtq_s8(a, b)); }
+    static inline vector and_(const vector& a, const vector& b) { return vandq_s8(a, b); }
+    static inline int allzeroes(const vector& a) { 
+        uint32x4_t b = vreinterpretq_u32_s8(a);
+        uint32x2_t tmp = vorr_u32(vget_low_u32(b), vget_high_u32(b));
+        return vget_lane_u32(vpmax_u32(tmp, tmp), 0) != 0;
+    }
+    static inline vector set1(int a) { return vdupq_n_s8(a); }
+    static inline vector load(const type* mem) { return vld1q_s8(mem); }
+    static inline void store(type* mem, const vector& a) { vst1q_s8(mem, a); }
+};
+
+template<>
+struct Simd<char, MinMax::relative> {
+    typedef int8_t type; //!< Type that will be used for score
+    typedef int8x16_t vector;
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
+    static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
+    static const bool negRange = false; //!< True if it uses negative range for score representation, goes with saturation
+    static inline vector add(const vector& a, const vector& b) { return vqaddq_s8(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return vqsubq_s8(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return vminq_s8(a, b); }
+    static inline vector max(const vector& a, const vector& b) { return vmaxq_s8(a, b); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return vreinterpretq_s8_u8(vcgtq_s8(a, b)); }
+    static inline vector and_(const vector& a, const vector& b) { return vandq_s8(a, b); }
+    static inline int allzeroes(const vector& a) { 
+        uint32x4_t b = vreinterpretq_u32_s8(a);
+        uint32x2_t tmp = vorr_u32(vget_low_u32(b), vget_high_u32(b));
+        return vget_lane_u32(vpmax_u32(tmp, tmp), 0) != 0;
+    }
+    static inline vector set1(int a) { return vdupq_n_s8(a); }
+    static inline vector load(const type* mem) { return vld1q_s8(mem); }
+    static inline void store(type* mem, const vector& a) { vst1q_s8(mem, a); }
+};
+
+template<>
+struct Simd<short, MinMax::relative> {
+    typedef int16_t type;
+    typedef int16x8_t vector;
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(short));
+    static const bool satArthm = true;
+    static const bool negRange = false;
+    static inline vector add(const vector& a, const vector& b) { return vqaddq_s16(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return vqsubq_s16(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return vminq_s16(a, b); }
+    static inline vector max(const vector& a, const vector& b) { return vmaxq_s16(a, b); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return vreinterpretq_s16_u16(vcgtq_s16(a, b)); }
+    static inline vector and_(const vector& a, const vector& b) { return vandq_s16(a, b); }
+    static inline int allzeroes(const vector& a) { 
+        uint32x4_t b = vreinterpretq_u32_s16(a);
+        uint32x2_t tmp = vorr_u32(vget_low_u32(b), vget_high_u32(b));
+        return vget_lane_u32(vpmax_u32(tmp, tmp), 0) != 0;
+    }
+    static inline vector set1(int a) { return vdupq_n_s16(a); }
+    static inline vector load(const type* mem) { return vld1q_s16(mem); }
+    static inline void store(type* mem, const vector& a) { vst1q_s16(mem, a); }
+};
+
+template<>
+struct Simd<int, MinMax::relative> {
+    typedef int32_t type;
+    typedef int32x4_t vector;
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int));
+    static const bool satArthm = false;
+    static const bool negRange = false;
+    static inline vector add(const vector& a, const vector& b) { return vaddq_s32(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return vsubq_s32(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return vminq_s32(a, b); }
+    static inline vector max(const vector& a, const vector& b) { return vmaxq_s32(a, b); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return vreinterpretq_s32_u32(vcgtq_s32(a, b)); }
+    static inline vector and_(const vector& a, const vector& b) { return vandq_s32(a, b); }
+    static inline int allzeroes(const vector& a) { 
+        uint32x4_t b = vreinterpretq_u32_s32(a);
+        uint32x2_t tmp = vorr_u32(vget_low_u32(b), vget_high_u32(b));
+        return vget_lane_u32(vpmax_u32(tmp, tmp), 0) != 0;
+    }
+    static inline vector set1(int a) { return vdupq_n_s32(a); }
+    static inline vector load(const type* mem) { return vld1q_s32(mem); }
+    static inline void store(type* mem, const vector& a) { vst1q_s32(mem, a); }
+};
+
 #else
-#error "Unsupported platform."
+#error "Unsupported platform, no SIMD extension found."
 #endif
 
 //--------------------------------------------------------------------------------------//
@@ -1452,7 +1552,7 @@ extern int opalSearchDatabase(
     unsigned char** db, int dbLength, int dbSeqLengths[],
     int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
     OpalSearchResult* results[], const int searchType, int mode, int overflowMethod) {
-#if !defined(__SSE4_1__) && !defined(__AVX2__)
+#if !defined(__SSE4_1__) && !defined(__AVX2__) && !defined(__ARM_NEON)
     return OPAL_ERR_NO_SIMD_SUPPORT;
 #else
     // Calculate score and end location.
@@ -1538,7 +1638,7 @@ extern int opalSearchDatabaseCharSW(
     unsigned char query[], int queryLength, unsigned char** db, int dbLength,
     int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
     int alphabetLength, OpalSearchResult* results[]) {
-#if !defined(__SSE4_1__) && !defined(__AVX2__)
+#if !defined(__SSE4_1__) && !defined(__AVX2__) && !defined(__ARM_NEON)
     return OPAL_ERR_NO_SIMD_SUPPORT;
 #else
     bool* calculated = new bool[dbLength];
