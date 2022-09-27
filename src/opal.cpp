@@ -89,11 +89,13 @@ static inline int simdIsAllZeroes(const __mxxxi& a) {
 /**
  * Contains parameters and SIMD instructions specific for certain score type.
  */
+ 
+enum MinMax { relative, absolute };
 
-template<typename T> struct SimdSW {};
+template<typename T, MinMax> struct Simd {};
 
 template<>
-struct SimdSW<char> {
+struct Simd<char, MinMax::absolute> {
     typedef char type; //!< Type that will be used for score
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
     static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
@@ -107,7 +109,21 @@ struct SimdSW<char> {
 };
 
 template<>
-struct SimdSW<short> {
+struct Simd<char, MinMax::relative> {
+    typedef char type; //!< Type that will be used for score
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
+    static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
+    static const bool negRange = false; //!< True if it uses negative range for score representation, goes with saturation
+    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_adds_epi8(a, b); }
+    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_subs_epi8(a, b); }
+    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi8(a, b); }
+    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi8(a, b); }
+    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_cmpgt_epi8(a, b); }
+    static inline __mxxxi set1(int a) { return _mmxxx_set1_epi8(a); }
+};
+
+template<>
+struct Simd<short, MinMax::relative> {
     typedef short type;
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(short));
     static const bool satArthm = true;
@@ -121,7 +137,7 @@ struct SimdSW<short> {
 };
 
 template<>
-struct SimdSW<int> {
+struct Simd<int, MinMax::relative> {
     typedef int type;
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int));
     static const bool satArthm = false;
@@ -133,6 +149,7 @@ struct SimdSW<int> {
     static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_cmpgt_epi32(a, b); }
     static inline __mxxxi set1(int a) { return _mmxxx_set1_epi32(a); }
 };
+
 //--------------------------------------------------------------------------------------//
 
 
@@ -509,17 +526,17 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
         for (int i = 0; i < dbLength_; i++) {
             calculated[i] = skip ? skip[i] : false;
         }
-        resultCode = searchDatabaseSW_< SimdSW<char> >(
+        resultCode = searchDatabaseSW_< Simd<char, MinMax::absolute> >(
             query, queryLength, db_, dbLength_, dbSeqLengths_,
             gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
             searchType, calculated, overflowMethod);
         if (resultCode == OPAL_ERR_OVERFLOW) {
-            resultCode = searchDatabaseSW_< SimdSW<short> >(
+            resultCode = searchDatabaseSW_< Simd<short, MinMax::relative> >(
                 query, queryLength, db_, dbLength_, dbSeqLengths_,
                 gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
                 searchType, calculated, overflowMethod);
             if (resultCode == OPAL_ERR_OVERFLOW) {
-                resultCode = searchDatabaseSW_< SimdSW<int> >(
+                resultCode = searchDatabaseSW_< Simd<int, MinMax::relative> >(
                     query, queryLength,
                     db_, dbLength_, dbSeqLengths_,
                     gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
@@ -533,62 +550,6 @@ static int searchDatabaseSW(unsigned char query[], int queryLength,
     delete[] calculated;
     return resultCode;
 }
-
-
-
-
-
-
-
-
-
-//------------------------------------ SIMD PARAMETERS ---------------------------------//
-/**
- * Contains parameters and SIMD instructions specific for certain score type.
- */
-template<typename T> class Simd {};
-
-template<>
-struct Simd<char> {
-    typedef char type; //!< Type that will be used for score
-    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
-    static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_adds_epi8(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_subs_epi8(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi8(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi8(a, b); }
-    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_cmpgt_epi8(a, b); }
-    static inline __mxxxi set1(int a) { return _mmxxx_set1_epi8(a); }
-};
-
-template<>
-struct Simd<short> {
-    typedef short type;
-    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(short));
-    static const bool satArthm = true;
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_adds_epi16(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_subs_epi16(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi16(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi16(a, b); }
-    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_cmpgt_epi16(a, b); }
-    static inline __mxxxi set1(int a) { return _mmxxx_set1_epi16(a); }
-};
-
-template<>
-struct Simd<int> {
-    typedef int type;
-    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int));
-    static const bool satArthm = false;
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_add_epi32(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_sub_epi32(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_min_epi32(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_max_epi32(a, b); }
-    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mmxxx_cmpgt_epi32(a, b); }
-    static inline __mxxxi set1(int a) { return _mmxxx_set1_epi32(a); }
-};
-//--------------------------------------------------------------------------------------//
-
-
 
 
 template<class SIMD, int MODE>
@@ -997,17 +958,17 @@ static int searchDatabase(unsigned char query[], int queryLength,
         for (int i = 0; i < dbLength_; i++) {
             calculated[i] = skip ? skip[i] : false;
         }
-        resultCode = searchDatabase_< Simd<char>, MODE >
+        resultCode = searchDatabase_< Simd<char, MinMax::relative>, MODE >
             (query, queryLength, db_, dbLength_, dbSeqLengths_,
              gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
              searchType, calculated, overflowMethod);
         if (resultCode == OPAL_ERR_OVERFLOW) {
-            resultCode = searchDatabase_< Simd<short>, MODE >
+            resultCode = searchDatabase_< Simd<short, MinMax::relative>, MODE >
                 (query, queryLength, db_, dbLength_, dbSeqLengths_,
                  gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
                  searchType, calculated, overflowMethod);
             if (resultCode == OPAL_ERR_OVERFLOW) {
-                resultCode = searchDatabase_< Simd<int>, MODE >
+                resultCode = searchDatabase_< Simd<int, MinMax::relative>, MODE >
                     (query, queryLength, db_, dbLength_, dbSeqLengths_,
                      gapOpen, gapExt, scoreMatrix, alphabetLength, results_,
                      searchType, calculated, overflowMethod);
@@ -1530,7 +1491,7 @@ extern int opalSearchDatabaseCharSW(
     for (int i = 0; i < dbLength; i++) {
         calculated[i] = false;
     }
-    int resultCode = searchDatabaseSW_< SimdSW<char> >(
+    int resultCode = searchDatabaseSW_< Simd<char, MinMax::absolute> >(
         query, queryLength, db, dbLength, dbSeqLengths, gapOpen, gapExt,
         scoreMatrix, alphabetLength, results, OPAL_SEARCH_SCORE, calculated,
         OPAL_OVERFLOW_SIMPLE);
