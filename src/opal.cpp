@@ -39,78 +39,80 @@ extern "C" {
 
 const int SIMD_REG_SIZE = 256;
 
-typedef __m256i __mxxxi;
-
 template<>
 struct Simd<char, MinMax::absolute> {
     typedef char type; //!< Type that will be used for score
+    typedef __m256i vector; //!< Type of the SIMD vector
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
     static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
     static const bool negRange = true; //!< True if it uses negative range for score representation, goes with saturation
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm256_adds_epi8(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm256_subs_epi8(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm256_min_epu8(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm256_max_epu8(a, b); }
-    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mm256_cmpgt_epi8(a, b); }
-    static inline __mxxxi and_(const __mxxxi& a, const __mxxxi& b) { return _mm256_and_si256(a, b); }
-    static inline int allzeroes(const __mxxxi& a) { return _mm256_testz_si256(a, a); }
-    static inline __mxxxi set1(int a) { return _mm256_set1_epi8(a); }
-    static inline __mxxxi load(const type* mem) { return _mm256_load_si256((const __mxxxi*) mem); }
-    static inline void store(type* mem, const __mxxxi& a) { _mm256_store_si256((__mxxxi*) mem, a); }
+    static inline vector add(const vector& a, const vector& b) { return _mm256_adds_epi8(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return _mm256_subs_epi8(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return _mm256_min_epu8(a, b); }
+    static inline vector max(const vector& a, const vector& b) { return _mm256_max_epu8(a, b); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return _mm256_cmpgt_epi8(a, b); }
+    static inline vector and_(const vector& a, const vector& b) { return _mm256_and_si256(a, b); }
+    static inline int allzeroes(const vector& a) { return _mm256_testz_si256(a, a); }
+    static inline vector set1(int a) { return _mm256_set1_epi8(a); }
+    static inline vector load(const type* mem) { return _mm256_load_si256((const vector*) mem); }
+    static inline void store(type* mem, const vector& a) { _mm256_store_si256((vector*) mem, a); }
 };
 
 template<>
 struct Simd<char, MinMax::relative> {
-    typedef char type; //!< Type that will be used for score
-    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
-    static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
-    static const bool negRange = false; //!< True if it uses negative range for score representation, goes with saturation
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm256_adds_epi8(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm256_subs_epi8(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm256_min_epi8(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm256_max_epi8(a, b); }
-    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mm256_cmpgt_epi8(a, b); }
-    static inline __mxxxi and_(const __mxxxi& a, const __mxxxi& b) { return _mm256_and_si256(a, b); }
-    static inline int allzeroes(const __mxxxi& a) { return _mm256_testz_si256(a, a); }
-    static inline __mxxxi set1(int a) { return _mm256_set1_epi8(a); }
-    static inline __mxxxi load(const type* mem) { return _mm256_load_si256((const __mxxxi*) mem); }
-    static inline void store(type* mem, const __mxxxi& a) { _mm256_store_si256((__mxxxi*) mem, a); }
+    typedef char type;
+    typedef __m256i vector;
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char));
+    static const bool satArthm = true;
+    static const bool negRange = false;
+    static inline vector add(const vector& a, const vector& b) { return _mm256_adds_epi8(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return _mm256_subs_epi8(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return _mm256_min_epi8(a, b); }
+    static inline vector max(const vector& a, const vector& b) { return _mm256_max_epi8(a, b); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return _mm256_cmpgt_epi8(a, b); }
+    static inline vector and_(const vector& a, const vector& b) { return _mm256_and_si256(a, b); }
+    static inline int allzeroes(const vector& a) { return _mm256_testz_si256(a, a); }
+    static inline vector set1(int a) { return _mm256_set1_epi8(a); }
+    static inline vector load(const type* mem) { return _mm256_load_si256((const vector*) mem); }
+    static inline void store(type* mem, const vector& a) { _mm256_store_si256((vector*) mem, a); }
 };
 
 template<>
 struct Simd<short, MinMax::relative> {
     typedef short type;
+    typedef __m256i vector;
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(short));
     static const bool satArthm = true;
     static const bool negRange = false;
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm256_adds_epi16(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm256_subs_epi16(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm256_min_epi16(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm256_max_epi16(a, b); }
-    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mm256_cmpgt_epi16(a, b); }
-    static inline __mxxxi and_(const __mxxxi& a, const __mxxxi& b) { return _mm256_and_si256(a, b); }
-    static inline int allzeroes(const __mxxxi& a) { return _mm256_testz_si256(a, a); }
-    static inline __mxxxi set1(int a) { return _mm256_set1_epi16(a); }
-    static inline __mxxxi load(const type* mem) { return _mm256_load_si256((const __mxxxi*) mem); }
-    static inline void store(type* mem, const __mxxxi& a) { _mm256_store_si256((__mxxxi*) mem, a); }
+    static inline vector add(const vector& a, const vector& b) { return _mm256_adds_epi16(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return _mm256_subs_epi16(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return _mm256_min_epi16(a, b); }
+    static inline vector max(const vector& a, const vector& b) { return _mm256_max_epi16(a, b); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return _mm256_cmpgt_epi16(a, b); }
+    static inline vector and_(const vector& a, const vector& b) { return _mm256_and_si256(a, b); }
+    static inline int allzeroes(const vector& a) { return _mm256_testz_si256(a, a); }
+    static inline vector set1(int a) { return _mm256_set1_epi16(a); }
+    static inline vector load(const type* mem) { return _mm256_load_si256((const vector*) mem); }
+    static inline void store(type* mem, const vector& a) { _mm256_store_si256((vector*) mem, a); }
 };
 
 template<>
 struct Simd<int, MinMax::relative> {
     typedef int type;
+    typedef __m256i vector;
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int));
     static const bool satArthm = false;
     static const bool negRange = false;
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm256_add_epi32(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm256_sub_epi32(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm256_min_epi32(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm256_max_epi32(a, b); }
-    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mm256_cmpgt_epi32(a, b); }
-    static inline __mxxxi and_(const __mxxxi& a, const __mxxxi& b) { return _mm256_and_si256(a, b); }
-    static inline int allzeroes(const __mxxxi& a) { return _mm256_testz_si256(a, a); }
-    static inline __mxxxi set1(int a) { return _mm256_set1_epi32(a); }
-    static inline __mxxxi load(const type* mem) { return _mm256_load_si256((const __mxxxi*) mem); }
-    static inline void store(type* mem, const __mxxxi& a) { _mm256_store_si256((__mxxxi*) mem, a); }
+    static inline vector add(const vector& a, const vector& b) { return _mm256_add_epi32(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return _mm256_sub_epi32(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return _mm256_min_epi32(a, b); }
+    static inline vector max(const vector& a, const vector& b) { return _mm256_max_epi32(a, b); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return _mm256_cmpgt_epi32(a, b); }
+    static inline vector and_(const vector& a, const vector& b) { return _mm256_and_si256(a, b); }
+    static inline int allzeroes(const vector& a) { return _mm256_testz_si256(a, a); }
+    static inline vector set1(int a) { return _mm256_set1_epi32(a); }
+    static inline vector load(const type* mem) { return _mm256_load_si256((const vector*) mem); }
+    static inline void store(type* mem, const vector& a) { _mm256_store_si256((vector*) mem, a); }
 };
 
 #elif defined(__SSE4_1__)
@@ -121,78 +123,80 @@ extern "C" {
 
 const int SIMD_REG_SIZE = 128;
 
-typedef __m128i __mxxxi;
-
 template<>
 struct Simd<char, MinMax::absolute> {
     typedef char type; //!< Type that will be used for score
+    typedef __m128i vector;
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
     static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
     static const bool negRange = true; //!< True if it uses negative range for score representation, goes with saturation
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm_adds_epi8(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm_subs_epi8(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm_min_epu8(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm_max_epu8(a, b); }
-    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mm_cmpgt_epi8(a, b); }
-    static inline __mxxxi and_(const __mxxxi& a, const __mxxxi& b) { return _mm_and_si128(a, b); }
-    static inline int allzeroes(const __mxxxi& a) { return _mm_testz_si128(a, a); }
-    static inline __mxxxi set1(int a) { return _mm_set1_epi8(a); }
-    static inline __mxxxi load(const type* mem) { return _mm_load_si128((const __mxxxi*) mem); }
-    static inline void store(type* mem, const __mxxxi& a) { _mm_store_si128((__mxxxi*) mem, a); }
+    static inline vector add(const vector& a, const vector& b) { return _mm_adds_epi8(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return _mm_subs_epi8(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return _mm_min_epu8(a, b); }
+    static inline vector max(const vector& a, const vector& b) { return _mm_max_epu8(a, b); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return _mm_cmpgt_epi8(a, b); }
+    static inline vector and_(const vector& a, const vector& b) { return _mm_and_si128(a, b); }
+    static inline int allzeroes(const vector& a) { return _mm_testz_si128(a, a); }
+    static inline vector set1(int a) { return _mm_set1_epi8(a); }
+    static inline vector load(const type* mem) { return _mm_load_si128((const vector*) mem); }
+    static inline void store(type* mem, const vector& a) { _mm_store_si128((vector*) mem, a); }
 };
 
 template<>
 struct Simd<char, MinMax::relative> {
     typedef char type; //!< Type that will be used for score
+    typedef __m128i vector;
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
     static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
     static const bool negRange = false; //!< True if it uses negative range for score representation, goes with saturation
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm_adds_epi8(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm_subs_epi8(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm_min_epi8(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm_max_epi8(a, b); }
-    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mm_cmpgt_epi8(a, b); }
-    static inline __mxxxi and_(const __mxxxi& a, const __mxxxi& b) { return _mm_and_si128(a, b); }
-    static inline int allzeroes(const __mxxxi& a) { return _mm_testz_si128(a, a); }
-    static inline __mxxxi set1(int a) { return _mm_set1_epi8(a); }
-    static inline __mxxxi load(const type* mem) { return _mm_load_si128((const __mxxxi*) mem); }
-    static inline void store(type* mem, const __mxxxi& a) { _mm_store_si128((__mxxxi*) mem, a); }
+    static inline vector add(const vector& a, const vector& b) { return _mm_adds_epi8(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return _mm_subs_epi8(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return _mm_min_epi8(a, b); }
+    static inline vector max(const vector& a, const vector& b) { return _mm_max_epi8(a, b); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return _mm_cmpgt_epi8(a, b); }
+    static inline vector and_(const vector& a, const vector& b) { return _mm_and_si128(a, b); }
+    static inline int allzeroes(const vector& a) { return _mm_testz_si128(a, a); }
+    static inline vector set1(int a) { return _mm_set1_epi8(a); }
+    static inline vector load(const type* mem) { return _mm_load_si128((const vector*) mem); }
+    static inline void store(type* mem, const vector& a) { _mm_store_si128((vector*) mem, a); }
 };
 
 template<>
 struct Simd<short, MinMax::relative> {
     typedef short type;
+    typedef __m128i vector;
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(short));
     static const bool satArthm = true;
     static const bool negRange = false;
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm_adds_epi16(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm_subs_epi16(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm_min_epi16(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm_max_epi16(a, b); }
-    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mm_cmpgt_epi16(a, b); }
-    static inline __mxxxi and_(const __mxxxi& a, const __mxxxi& b) { return _mm_and_si128(a, b); }
-    static inline int allzeroes(const __mxxxi& a) { return _mm_testz_si128(a, a); }
-    static inline __mxxxi set1(int a) { return _mm_set1_epi16(a); }
-    static inline __mxxxi load(const type* mem) { return _mm_load_si128((const __mxxxi*) mem); }
-    static inline void store(type* mem, const __mxxxi& a) { _mm_store_si128((__mxxxi*) mem, a); }
+    static inline vector add(const vector& a, const vector& b) { return _mm_adds_epi16(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return _mm_subs_epi16(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return _mm_min_epi16(a, b); }
+    static inline vector max(const vector& a, const vector& b) { return _mm_max_epi16(a, b); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return _mm_cmpgt_epi16(a, b); }
+    static inline vector and_(const vector& a, const vector& b) { return _mm_and_si128(a, b); }
+    static inline int allzeroes(const vector& a) { return _mm_testz_si128(a, a); }
+    static inline vector set1(int a) { return _mm_set1_epi16(a); }
+    static inline vector load(const type* mem) { return _mm_load_si128((const vector*) mem); }
+    static inline void store(type* mem, const vector& a) { _mm_store_si128((vector*) mem, a); }
 };
 
 template<>
 struct Simd<int, MinMax::relative> {
     typedef int type;
+    typedef __m128i vector;
     static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int));
     static const bool satArthm = false;
     static const bool negRange = false;
-    static inline __mxxxi add(const __mxxxi& a, const __mxxxi& b) { return _mm_add_epi32(a, b); }
-    static inline __mxxxi sub(const __mxxxi& a, const __mxxxi& b) { return _mm_sub_epi32(a, b); }
-    static inline __mxxxi min(const __mxxxi& a, const __mxxxi& b) { return _mm_min_epi32(a, b); }
-    static inline __mxxxi max(const __mxxxi& a, const __mxxxi& b) { return _mm_max_epi32(a, b); }
-    static inline __mxxxi cmpgt(const __mxxxi& a, const __mxxxi& b) { return _mm_cmpgt_epi32(a, b); }
-    static inline __mxxxi and_(const __mxxxi& a, const __mxxxi& b) { return _mm_and_si128(a, b); }
-    static inline int allzeroes(const __mxxxi& a) { return _mm_testz_si128(a, a); }
-    static inline __mxxxi set1(int a) { return _mm_set1_epi32(a); }
-    static inline __mxxxi load(const type* mem) { return _mm_load_si128((const __mxxxi*) mem); }
-    static inline void store(type* mem, const __mxxxi& a) { _mm_store_si128((__mxxxi*) mem, a); }
+    static inline vector add(const vector& a, const vector& b) { return _mm_add_epi32(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return _mm_sub_epi32(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return _mm_min_epi32(a, b); }
+    static inline vector max(const vector& a, const vector& b) { return _mm_max_epi32(a, b); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return _mm_cmpgt_epi32(a, b); }
+    static inline vector and_(const vector& a, const vector& b) { return _mm_and_si128(a, b); }
+    static inline int allzeroes(const vector& a) { return _mm_testz_si128(a, a); }
+    static inline vector set1(int a) { return _mm_set1_epi32(a); }
+    static inline vector load(const type* mem) { return _mm_load_si128((const vector*) mem); }
+    static inline void store(type* mem, const vector& a) { _mm_store_si128((vector*) mem, a); }
 };
 
 #else
@@ -217,9 +221,10 @@ static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx,
 // }
 
 // This structure represents cell in dynamic programming matrix, but only with E and H values.
+template<class SIMD>
 struct CellEH {
-    __mxxxi H;
-    __mxxxi E;
+    typename SIMD::vector H;
+    typename SIMD::vector E;
 };
 
 /**
@@ -266,8 +271,8 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
 
     // ------------------------ INITIALIZATION -------------------------- //
-    __mxxxi zeroes = SIMD::set1(0);
-    __mxxxi scoreZeroes; // 0 normally, but lower bound if using negative range
+    typename SIMD::vector zeroes = SIMD::set1(0);
+    typename SIMD::vector scoreZeroes; // 0 normally, but lower bound if using negative range
     if (SIMD::negRange) {
         scoreZeroes = SIMD::set1(LOWER_BOUND);
     } else {
@@ -292,7 +297,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
     // Profile query -> here we store preprocessed score data needed in core loop.
     // It is recalculated for each column.
-    __mxxxi P[alphabetLength];
+    typename SIMD::vector P[alphabetLength];
 
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++) {
@@ -302,19 +307,19 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     }
 
     // Q is gap open penalty, R is gap ext penalty.
-    __mxxxi Q = SIMD::set1(gapOpen);
-    __mxxxi R = SIMD::set1(gapExt);
+    typename SIMD::vector Q = SIMD::set1(gapOpen);
+    typename SIMD::vector R = SIMD::set1(gapExt);
 
     int rowsWithImprovement[queryLength];  // Indexes of rows where one of sequences improved score.
 
     // Previous Hs, previous Es, previous F, all signed short.
-    CellEH prevColumn[queryLength];  // Stores results of previous column in matrix.
+    CellEH<SIMD> prevColumn[queryLength];  // Stores results of previous column in matrix.
     // Initialize all values to 0
     for (int i = 0; i < queryLength; i++) {
         prevColumn[i].H = prevColumn[i].E = scoreZeroes;
     }
 
-    __mxxxi maxH = scoreZeroes;  // Best score in sequence
+    typename SIMD::vector maxH = scoreZeroes;  // Best score in sequence
     // ------------------------------------------------------------------ //
 
 
@@ -335,28 +340,28 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         // ---------------------------------------------------------------------- //
 
         // Previous cells: u - up, l - left, ul - up left
-        __mxxxi uF, uH, ulH;
+        typename SIMD::vector uF, uH, ulH;
         uF = uH = ulH = scoreZeroes; // F[-1, c] = H[-1, c] = H[-1, c-1] = 0
 
-        __mxxxi ofTest = scoreZeroes; // Used for detecting the overflow when not using saturated ar
+        typename SIMD::vector ofTest = scoreZeroes; // Used for detecting the overflow when not using saturated ar
 
         int rowsWithImprovementLength = 0;
 
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
             // Calculate E = max(lH-Q, lE-R)
-            __mxxxi E = SIMD::max(SIMD::sub(prevColumn[r].H, Q), SIMD::sub(prevColumn[r].E, R));
+            typename SIMD::vector E = SIMD::max(SIMD::sub(prevColumn[r].H, Q), SIMD::sub(prevColumn[r].E, R));
 
             // Calculate F = max(uH-Q, uF-R)
-            __mxxxi F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R));
+            typename SIMD::vector F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R));
 
             // Calculate H
-            __mxxxi H = SIMD::max(F, E);
+            typename SIMD::vector H = SIMD::max(F, E);
             if (!SIMD::negRange) {
                 // If not using negative range, then H could be negative at this moment so we need this
                 H = SIMD::max(H, zeroes);
             }
-            __mxxxi ulH_P = SIMD::add(ulH, P[query[r]]);
+            typename SIMD::vector ulH_P = SIMD::add(ulH, P[query[r]]);
             // If using negative range: if ulH_P >= 0 then we have overflow
 
             H = SIMD::max(H, ulH_P);
@@ -507,7 +512,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
                 }
             }
             // Reset previous columns (Es and Hs) and maxH
-            __mxxxi resetMaskPacked = SIMD::load(resetMask);
+            typename SIMD::vector resetMaskPacked = SIMD::load(resetMask);
             if (SIMD::negRange) {
                 for (int i = 0; i < queryLength; i++) {
                     prevColumn[i].H = SIMD::add(prevColumn[i].H, resetMaskPacked);
@@ -644,9 +649,9 @@ static int searchDatabase_(unsigned char query[], int queryLength,
 
 
     // ------------------------ INITIALIZATION -------------------------- //
-    const __mxxxi ZERO_SIMD = SIMD::set1(0);
-    const __mxxxi LOWER_BOUND_SIMD = SIMD::set1(LOWER_BOUND);
-    const __mxxxi LOWER_SCORE_BOUND_SIMD = SIMD::set1(LOWER_SCORE_BOUND);
+    const typename SIMD::vector ZERO_SIMD = SIMD::set1(0);
+    const typename SIMD::vector LOWER_BOUND_SIMD = SIMD::set1(LOWER_BOUND);
+    const typename SIMD::vector LOWER_SCORE_BOUND_SIMD = SIMD::set1(LOWER_SCORE_BOUND);
 
     int nextDbSeqIdx = 0; // index in db
     int currDbSeqsIdxs[SIMD::numSeqs]; // index in db
@@ -671,12 +676,12 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         }
 
     // Q is gap open penalty, R is gap ext penalty.
-    const __mxxxi Q = SIMD::set1(gapOpen);
-    const __mxxxi R = SIMD::set1(gapExt);
+    const typename SIMD::vector Q = SIMD::set1(gapOpen);
+    const typename SIMD::vector R = SIMD::set1(gapExt);
 
     // Previous H column (array), previous E column (array), previous F, all signed short
-    __mxxxi prevHs[queryLength];
-    __mxxxi prevEs[queryLength];
+    typename SIMD::vector prevHs[queryLength];
+    typename SIMD::vector prevEs[queryLength];
     // Initialize all values
     for (int r = 0; r < queryLength; r++) {
         if (MODE == OPAL_MODE_OV)
@@ -692,13 +697,13 @@ static int searchDatabase_(unsigned char query[], int queryLength,
     }
 
     // u - up, ul - up left
-    __mxxxi uH, ulH;
+    typename SIMD::vector uH, ulH;
     if (MODE == OPAL_MODE_NW) {
         ulH = ZERO_SIMD;
         uH = SIMD::sub(R, Q); // -Q + R
     }
 
-    __mxxxi maxLastRowH = LOWER_BOUND_SIMD; // Keeps track of maximum H in last row
+    typename SIMD::vector maxLastRowH = LOWER_BOUND_SIMD; // Keeps track of maximum H in last row
     // ------------------------------------------------------------------ //
 
 
@@ -707,7 +712,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
     while (numEndedDbSeqs < dbLength) {
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
-        __mxxxi P[alphabetLength];
+        typename SIMD::vector P[alphabetLength];
         typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
         for (unsigned char letter = 0; letter < alphabetLength; letter++) {
             int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
@@ -721,7 +726,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         // ---------------------------------------------------------------------- //
 
         // u - up
-        __mxxxi uF = LOWER_SCORE_BOUND_SIMD;
+        typename SIMD::vector uF = LOWER_SCORE_BOUND_SIMD;
 
         // Database sequence has fixed start and end only in NW
         if (MODE == OPAL_MODE_NW) {
@@ -729,7 +734,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                 typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
                 for (int i = 0; i < SIMD::numSeqs; i++)
                     resetMask[i] = justLoaded[i] ?  0 : -1;
-                const __mxxxi resetMaskPacked = SIMD::load(resetMask);
+                const typename SIMD::vector resetMaskPacked = SIMD::load(resetMask);
                 ulH = SIMD::and_(uH, resetMaskPacked);
             } else {
                 ulH = uH;
@@ -741,31 +746,31 @@ static int searchDatabase_(unsigned char query[], int queryLength,
             uH = ulH = ZERO_SIMD;
         }
 
-        __mxxxi minE, minF;
+        typename SIMD::vector minE, minF;
         minE = minF = SIMD::set1(UPPER_BOUND);
-        __mxxxi maxH = LOWER_BOUND_SIMD; // Max H in this column
-        __mxxxi H;
+        typename SIMD::vector maxH = LOWER_BOUND_SIMD; // Max H in this column
+        typename SIMD::vector H;
 
-        __mxxxi firstRow_uH, firstRow_ulH; // Values of uH and ulH from first row of column
+        typename SIMD::vector firstRow_uH, firstRow_ulH; // Values of uH and ulH from first row of column
 
         if (MODE == OPAL_MODE_NW) {
             firstRow_uH = uH;
             firstRow_ulH = ulH;
         }
 
-        __mxxxi prevMaxLastRowH = maxLastRowH;
+        typename SIMD::vector prevMaxLastRowH = maxLastRowH;
         // ----------------------- CORE LOOP (ONE COLUMN) ----------------------- //
         for (int r = 0; r < queryLength; r++) { // For each cell in column
             // Calculate E = max(lH-Q, lE-R)
-            __mxxxi E = SIMD::max(SIMD::sub(prevHs[r], Q), SIMD::sub(prevEs[r], R)); // E could overflow
+            typename SIMD::vector E = SIMD::max(SIMD::sub(prevHs[r], Q), SIMD::sub(prevEs[r], R)); // E could overflow
 
             // Calculate F = max(uH-Q, uF-R)
-            __mxxxi F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R)); // F could overflow
+            typename SIMD::vector F = SIMD::max(SIMD::sub(uH, Q), SIMD::sub(uF, R)); // F could overflow
             minF = SIMD::min(minF, F); // For overflow detection
 
             // Calculate H
             H = SIMD::max(F, E);
-            __mxxxi ulH_P = SIMD::add(ulH, P[query[r]]);
+            typename SIMD::vector ulH_P = SIMD::add(ulH, P[query[r]]);
             H = SIMD::max(H, ulH_P); // H could overflow
 
             maxH = SIMD::max(maxH, H); // update best score in column
@@ -810,7 +815,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                 return 1;*/
         } else {
             // There is overflow if minE == LOWER_BOUND or minF == LOWER_BOUND or maxH == UPPER_BOUND
-            __mxxxi minEF = SIMD::min(minE, minF);
+            typename SIMD::vector minEF = SIMD::min(minE, minF);
             typename SIMD::type unpackedMinEF[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
             SIMD::store(unpackedMinEF, minEF);
             for (int i = 0; i < SIMD::numSeqs; i++) {
@@ -831,7 +836,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         // ------------------ Store end location of best score ------------------ //
         if (searchType != OPAL_SEARCH_SCORE && (MODE == OPAL_MODE_HW || MODE == OPAL_MODE_OV)) {
             // Determine the column of best score.
-            __mxxxi greater = SIMD::cmpgt(maxLastRowH, prevMaxLastRowH);
+            typename SIMD::vector greater = SIMD::cmpgt(maxLastRowH, prevMaxLastRowH);
             typename SIMD::type unpackedGreater[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
             SIMD::store(unpackedGreater, greater);
             for (int i = 0; i < SIMD::numSeqs; i++) {
@@ -851,7 +856,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
             shortestDbSeqLength = -1;
 
             // Calculate best scores
-            __mxxxi bestScore;
+            typename SIMD::vector bestScore;
             if (MODE == OPAL_MODE_OV)
                 bestScore = SIMD::max(maxH, maxLastRowH); // Maximum of last row and column
             if (MODE == OPAL_MODE_HW)
@@ -935,11 +940,11 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                 resetMask[i] = justLoaded[i] ?  0 : -1;
                 setMask[i]   = justLoaded[i] ? -1 :  0;
             }
-            const __mxxxi resetMaskPacked = SIMD::load(resetMask);
-            const __mxxxi setMaskPacked = SIMD::load(setMask);
+            const typename SIMD::vector resetMaskPacked = SIMD::load(resetMask);
+            const typename SIMD::vector setMaskPacked = SIMD::load(setMask);
 
             // Set prevEs ended channels to LOWER_SCORE_BOUND
-            const __mxxxi maskedLowerScoreBoundSimd = SIMD::and_(setMaskPacked, LOWER_SCORE_BOUND_SIMD);
+            const typename SIMD::vector maskedLowerScoreBoundSimd = SIMD::and_(setMaskPacked, LOWER_SCORE_BOUND_SIMD);
             for (int r = 0; r < queryLength; r++) {
                 prevEs[r] = SIMD::and_(prevEs[r], resetMaskPacked);
                 prevEs[r] = SIMD::add(prevEs[r], maskedLowerScoreBoundSimd);
