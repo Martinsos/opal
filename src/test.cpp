@@ -77,6 +77,8 @@ int main(int argc, char * const argv[]) {
     printf("Using AVX2!\n");
 #elif __SSE4_1__
     printf("Using SSE4.1!\n");
+#elif __SSE2__
+    printf("Using SSE2!\n");
 #elif __ARM_NEON
     printf("Using ARM NEON!\n");
 #endif

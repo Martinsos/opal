@@ -193,6 +193,126 @@ struct Simd<int, MinMax::relative> {
     static inline void store(type* mem, const vector& a) { _mm_store_si128((vector*) mem, a); }
 };
 
+#elif defined(__SSE2__)
+
+extern "C" {
+#include <emmintrin.h> // SSE2 and lower
+}
+
+const int SIMD_REG_SIZE = 128;
+
+template<>
+struct Simd<char, MinMax::absolute> {
+    typedef char type; //!< Type that will be used for score
+    typedef __m128i vector;
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
+    static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
+    static const bool negRange = true; //!< True if it uses negative range for score representation, goes with saturation
+    static inline vector add(const vector& a, const vector& b) { return _mm_adds_epi8(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return _mm_subs_epi8(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return _mm_min_epu8(a, b); }
+    static inline vector max(const vector& a, const vector& b) { return _mm_max_epu8(a, b); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return _mm_cmpgt_epi8(a, b); }
+    static inline vector and_(const vector& a, const vector& b) { return _mm_and_si128(a, b); }
+    static inline int allzeroes(const vector& a) { return _mm_movemask_epi8(_mm_cmpeq_epi8(a, _mm_setzero_si128())) == 0xFFFF; }
+    static inline vector set1(int a) { return _mm_set1_epi8(a); }
+    static inline vector load(const type* mem) { return _mm_load_si128((const vector*) mem); }
+    static inline void store(type* mem, const vector& a) { _mm_store_si128((vector*) mem, a); }
+};
+
+template<>
+struct Simd<char, MinMax::relative> {
+    typedef char type; //!< Type that will be used for score
+    typedef __m128i vector;
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
+    static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
+    static const bool negRange = false; //!< True if it uses negative range for score representation, goes with saturation
+    static inline vector add(const vector& a, const vector& b) { return _mm_adds_epi8(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return _mm_subs_epi8(a, b); }
+    static inline vector min(const vector& a, const vector& b) { 
+        __m128i result;
+        __m128i sign_a  = _mm_cmplt_epi8( _mm_set1_epi8(-1), a );
+        __m128i sign_b  = _mm_cmplt_epi8( _mm_set1_epi8(-1), b );
+        __m128i sign_eq = _mm_cmpeq_epi8(sign_a, sign_b);
+       result =                      _mm_and_si128(   sign_eq, _mm_min_epu8(a, b));           // if same sign, take minimum
+       result = _mm_or_si128(result, _mm_andnot_si128(sign_eq, _mm_andnot_si128(sign_a, a))); // if not, take negative from a
+       result = _mm_or_si128(result, _mm_andnot_si128(sign_eq, _mm_andnot_si128(sign_b, b))); // and then negative from b
+       return result;
+    }
+    static inline vector max(const vector& a, const vector& b) { 
+        __m128i result;
+        __m128i sign_a  = _mm_cmplt_epi8( _mm_set1_epi8(-1), a );
+        __m128i sign_b  = _mm_cmplt_epi8( _mm_set1_epi8(-1), b );
+        __m128i sign_eq = _mm_cmpeq_epi8(sign_a, sign_b);
+       result =                      _mm_and_si128(   sign_eq, _mm_max_epu8(a, b));        // if same sign, take maximum
+       result = _mm_or_si128(result, _mm_andnot_si128(sign_eq, _mm_and_si128(sign_a, a))); // if not, take positive from a
+       result = _mm_or_si128(result, _mm_andnot_si128(sign_eq, _mm_and_si128(sign_b, b))); // and then positive from b
+       return result;
+    }
+    static inline vector cmpgt(const vector& a, const vector& b) { return _mm_cmpgt_epi8(a, b); }
+    static inline vector and_(const vector& a, const vector& b) { return _mm_and_si128(a, b); }
+    static inline int allzeroes(const vector& a) { return _mm_movemask_epi8(_mm_cmpeq_epi8(a, _mm_setzero_si128())) == 0xFFFF; }
+    static inline vector set1(int a) { return _mm_set1_epi8(a); }
+    static inline vector load(const type* mem) { return _mm_load_si128((const vector*) mem); }
+    static inline void store(type* mem, const vector& a) { _mm_store_si128((vector*) mem, a); }
+};
+
+template<>
+struct Simd<short, MinMax::relative> {
+    typedef short type;
+    typedef __m128i vector;
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(short));
+    static const bool satArthm = true;
+    static const bool negRange = false;
+    static inline vector add(const vector& a, const vector& b) { return _mm_adds_epi16(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return _mm_subs_epi16(a, b); }
+    static inline vector min(const vector& a, const vector& b) { return _mm_min_epi16(a, b); }
+    static inline vector max(const vector& a, const vector& b) { return _mm_max_epi16(a, b); }
+    static inline vector cmpgt(const vector& a, const vector& b) { return _mm_cmpgt_epi16(a, b); }
+    static inline vector and_(const vector& a, const vector& b) { return _mm_and_si128(a, b); }
+    static inline int allzeroes(const vector& a) { return _mm_movemask_epi8(_mm_cmpeq_epi8(a, _mm_setzero_si128())) == 0xFFFF; }
+    static inline vector set1(int a) { return _mm_set1_epi16(a); }
+    static inline vector load(const type* mem) { return _mm_load_si128((const vector*) mem); }
+    static inline void store(type* mem, const vector& a) { _mm_store_si128((vector*) mem, a); }
+};
+
+template<>
+struct Simd<int, MinMax::relative> {
+    typedef int type;
+    typedef __m128i vector;
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int));
+    static const bool satArthm = false;
+    static const bool negRange = false;
+    static inline vector add(const vector& a, const vector& b) { return _mm_add_epi32(a, b); }
+    static inline vector sub(const vector& a, const vector& b) { return _mm_sub_epi32(a, b); }
+    static inline vector min(const vector& a, const vector& b) { 
+        union { __m128i vec; int lanes[numSeqs] ;} xa;
+        union { __m128i vec; int lanes[numSeqs] ;} xb;
+        union { __m128i vec; int lanes[numSeqs] ;} xc;
+        xa.vec = a;
+        xb.vec = b;
+        for (int i = 0; i < numSeqs; i++) 
+            xc.lanes[i] = std::min(xa.lanes[i], xb.lanes[i]);
+        return xc.vec;
+    }
+    static inline vector max(const vector& a, const vector& b) { 
+        union { __m128i vec; int lanes[numSeqs] ;} xa;
+        union { __m128i vec; int lanes[numSeqs] ;} xb;
+        union { __m128i vec; int lanes[numSeqs] ;} xc;
+        xa.vec = a;
+        xb.vec = b;
+        for (int i = 0; i < numSeqs; i++) 
+            xc.lanes[i] = std::max(xa.lanes[i], xb.lanes[i]);
+        return xc.vec;
+    }
+    static inline vector cmpgt(const vector& a, const vector& b) { return _mm_cmpgt_epi32(a, b); }
+    static inline vector and_(const vector& a, const vector& b) { return _mm_and_si128(a, b); }
+    static inline int allzeroes(const vector& a) { return _mm_movemask_epi8(_mm_cmpeq_epi8(a, _mm_setzero_si128())) == 0xFFFF; }
+    static inline vector set1(int a) { return _mm_set1_epi32(a); }
+    static inline vector load(const type* mem) { return _mm_load_si128((const vector*) mem); }
+    static inline void store(type* mem, const vector& a) { _mm_store_si128((vector*) mem, a); }
+};
+
 #elif defined(__ARM_NEON)
 
 extern "C" {
@@ -1542,7 +1662,7 @@ extern int opalSearchDatabase(
     unsigned char** db, int dbLength, int dbSeqLengths[],
     int gapOpen, int gapExt, int* scoreMatrix, int alphabetLength,
     OpalSearchResult* results[], const int searchType, int mode, int overflowMethod) {
-#if !defined(__SSE4_1__) && !defined(__AVX2__) && !defined(__ARM_NEON)
+#if !defined(__SSE2__) && !defined(__SSE4_1__) && !defined(__AVX2__) && !defined(__ARM_NEON)
     return OPAL_ERR_NO_SIMD_SUPPORT;
 #else
     // Calculate score and end location.
@@ -1628,7 +1748,7 @@ extern int opalSearchDatabaseCharSW(
     unsigned char query[], int queryLength, unsigned char** db, int dbLength,
     int dbSeqLengths[], int gapOpen, int gapExt, int* scoreMatrix,
     int alphabetLength, OpalSearchResult* results[]) {
-#if !defined(__SSE4_1__) && !defined(__AVX2__) && !defined(__ARM_NEON)
+#if !defined(__SSE2__) && !defined(__SSE4_1__) && !defined(__AVX2__) && !defined(__ARM_NEON)
     return OPAL_ERR_NO_SIMD_SUPPORT;
 #else
     bool* calculated = new bool[dbLength];
