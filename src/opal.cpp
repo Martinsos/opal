@@ -8,23 +8,17 @@
 #include "opal.h"
 
 
-// I define aliases for SSE intrinsics, so they can be used in code not depending on SSE generation.
-// If available, AVX2 is used because it has two times bigger register, thus everything is two times faster.
-#ifdef __AVX2__
-
-#define _mmxxx_testz_si _mm256_testz_si256
-
-#else // SSE4.1
-
-#define _mmxxx_testz_si _mm_testz_si128
-
-#endif
-
-
 //------------------------------------ SIMD PARAMETERS ---------------------------------//
 
 /**
  * Contains parameters and SIMD instructions specific for certain score type.
+ *
+ * SIMD configuration is done with templates rather than aliases because the 
+ * NEON implementation does not have strict equivalents of some SSE/AVX 
+ * functions.
+ *
+ * If available, AVX2 is used because it has two times bigger register, thus 
+ * everything is two times faster.
  */
  
 enum MinMax { relative, absolute };
@@ -211,7 +205,7 @@ template<>
 struct Simd<char, MinMax::absolute> {
     typedef int8_t type; //!< Type that will be used for score
     typedef int8x16_t vector;
-    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int8_t)); //!< Number of sequences that can be done in parallel.
     static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
     static const bool negRange = true; //!< True if it uses negative range for score representation, goes with saturation
     static inline vector add(const vector& a, const vector& b) { return vqaddq_s8(a, b); }
@@ -221,9 +215,8 @@ struct Simd<char, MinMax::absolute> {
     static inline vector cmpgt(const vector& a, const vector& b) { return vreinterpretq_s8_u8(vcgtq_s8(a, b)); }
     static inline vector and_(const vector& a, const vector& b) { return vandq_s8(a, b); }
     static inline int allzeroes(const vector& a) { 
-        uint32x4_t b = vreinterpretq_u32_s8(a);
-        uint32x2_t tmp = vorr_u32(vget_low_u32(b), vget_high_u32(b));
-        return vget_lane_u32(vpmax_u32(tmp, tmp), 0) != 0;
+        int64x2_t s64 = vreinterpretq_s64_s8(a);
+        return !(vgetq_lane_s64(s64, 0) | vgetq_lane_s64(s64, 1));
     }
     static inline vector set1(int a) { return vdupq_n_s8(a); }
     static inline vector load(const type* mem) { return vld1q_s8(mem); }
@@ -234,7 +227,7 @@ template<>
 struct Simd<char, MinMax::relative> {
     typedef int8_t type; //!< Type that will be used for score
     typedef int8x16_t vector;
-    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(char)); //!< Number of sequences that can be done in parallel.
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int8_t)); //!< Number of sequences that can be done in parallel.
     static const bool satArthm = true; //!< True if saturation arithmetic is used, false otherwise.
     static const bool negRange = false; //!< True if it uses negative range for score representation, goes with saturation
     static inline vector add(const vector& a, const vector& b) { return vqaddq_s8(a, b); }
@@ -244,9 +237,8 @@ struct Simd<char, MinMax::relative> {
     static inline vector cmpgt(const vector& a, const vector& b) { return vreinterpretq_s8_u8(vcgtq_s8(a, b)); }
     static inline vector and_(const vector& a, const vector& b) { return vandq_s8(a, b); }
     static inline int allzeroes(const vector& a) { 
-        uint32x4_t b = vreinterpretq_u32_s8(a);
-        uint32x2_t tmp = vorr_u32(vget_low_u32(b), vget_high_u32(b));
-        return vget_lane_u32(vpmax_u32(tmp, tmp), 0) != 0;
+        int64x2_t s64 = vreinterpretq_s64_s8(a);
+        return !(vgetq_lane_s64(s64, 0) | vgetq_lane_s64(s64, 1));
     }
     static inline vector set1(int a) { return vdupq_n_s8(a); }
     static inline vector load(const type* mem) { return vld1q_s8(mem); }
@@ -257,7 +249,7 @@ template<>
 struct Simd<short, MinMax::relative> {
     typedef int16_t type;
     typedef int16x8_t vector;
-    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(short));
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int16_t));
     static const bool satArthm = true;
     static const bool negRange = false;
     static inline vector add(const vector& a, const vector& b) { return vqaddq_s16(a, b); }
@@ -267,9 +259,8 @@ struct Simd<short, MinMax::relative> {
     static inline vector cmpgt(const vector& a, const vector& b) { return vreinterpretq_s16_u16(vcgtq_s16(a, b)); }
     static inline vector and_(const vector& a, const vector& b) { return vandq_s16(a, b); }
     static inline int allzeroes(const vector& a) { 
-        uint32x4_t b = vreinterpretq_u32_s16(a);
-        uint32x2_t tmp = vorr_u32(vget_low_u32(b), vget_high_u32(b));
-        return vget_lane_u32(vpmax_u32(tmp, tmp), 0) != 0;
+        int64x2_t s64 = vreinterpretq_s64_s16(a);
+        return !(vgetq_lane_s64(s64, 0) | vgetq_lane_s64(s64, 1));
     }
     static inline vector set1(int a) { return vdupq_n_s16(a); }
     static inline vector load(const type* mem) { return vld1q_s16(mem); }
@@ -280,7 +271,7 @@ template<>
 struct Simd<int, MinMax::relative> {
     typedef int32_t type;
     typedef int32x4_t vector;
-    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int));
+    static const int numSeqs = SIMD_REG_SIZE / (8 * sizeof(int32_t));
     static const bool satArthm = false;
     static const bool negRange = false;
     static inline vector add(const vector& a, const vector& b) { return vaddq_s32(a, b); }
@@ -290,9 +281,8 @@ struct Simd<int, MinMax::relative> {
     static inline vector cmpgt(const vector& a, const vector& b) { return vreinterpretq_s32_u32(vcgtq_s32(a, b)); }
     static inline vector and_(const vector& a, const vector& b) { return vandq_s32(a, b); }
     static inline int allzeroes(const vector& a) { 
-        uint32x4_t b = vreinterpretq_u32_s32(a);
-        uint32x2_t tmp = vorr_u32(vget_low_u32(b), vget_high_u32(b));
-        return vget_lane_u32(vpmax_u32(tmp, tmp), 0) != 0;
+        int64x2_t s64 = vreinterpretq_s64_s32(a);
+        return !(vgetq_lane_s64(s64, 0) | vgetq_lane_s64(s64, 1));
     }
     static inline vector set1(int a) { return vdupq_n_s32(a); }
     static inline vector load(const type* mem) { return vld1q_s32(mem); }
@@ -312,13 +302,13 @@ static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx,
 
 
 // For debugging
-// template<class SIMD>
-// void print_mmxxxi(__mxxxi mm) {
-//     typename SIMD::type unpacked[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
-//     _mmxxx_store_si((__mxxxi*)unpacked, mm);
-//     for (int i = 0; i < SIMD::numSeqs; i++)
-//         printf("%d ", unpacked[i]);
-// }
+template<class SIMD>
+void print_mmxxxi(typename SIMD::vector mm) {
+    typename SIMD::type unpacked[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+    SIMD::store(unpacked, mm);
+    for (int i = 0; i < SIMD::numSeqs; i++)
+        printf("%d ", unpacked[i]);
+}
 
 // This structure represents cell in dynamic programming matrix, but only with E and H values.
 template<class SIMD>
