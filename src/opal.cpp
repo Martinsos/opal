@@ -1600,9 +1600,9 @@ static void findAlignment(
         // Determine to which cell and which field we should go next, move, and add operation to alignment.
         switch (field) {
         case Cell::Field::H:
-            if (cell.H == cell.E) {
+            if ((cell.H == cell.E) && (cIdx > 0)) {
                 field = Cell::Field::E;
-            } else if (cell.H == cell.F) {
+            } else if ((cell.H == cell.F) && (rIdx > 0)) {
                 field = Cell::Field::F;
             } else {
                 alignment[alignmentLength++] = (query[rIdx] == target[cIdx] ? OPAL_ALIGN_MATCH
