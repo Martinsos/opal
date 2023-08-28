@@ -1016,13 +1016,19 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         bool overflowDetected = false;  // True if overflow was detected for this column.
         bool overflowed[SIMD::numSeqs];
         if (!SIMD::satArthm) {
-            /*           // This check is based on following assumptions:
+            // This check is based on following assumptions:
             //  - overflow wraps
             //  - Q, R and all scores from scoreMatrix are between LOWER_BOUND/2 and UPPER_BOUND/2 exclusive
-            typename SIMD::type* unpackedOfTest = (typename SIMD::type *)&ofTest;
-            for (int i = 0; i < SIMD::numSeqs; i++)
-                if (currDbSeqsPos[i] != 0 && unpackedOfTest[i] <= LOWER_BOUND/2)
-                return 1;*/
+            typename SIMD::vector minEF = SIMD::min(minE, minF);
+            typename SIMD::type unpackedMinEF[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+            SIMD::store(unpackedMinEF, minEF);
+            for (int i = 0; i < SIMD::numSeqs; i++) {
+                overflowed[i] = currDbSeqsPos[i] != 0 && unpackedMinEF[i] <= LOWER_BOUND / 2;
+                if (overflowMethod == OPAL_OVERFLOW_BUCKETS && overflowed[i]) {
+                    // In buckets method, we stop calculation when overflow is detected.
+                    return OPAL_ERR_OVERFLOW;
+                }
+            }
         } else {
             // There is overflow if minE == LOWER_BOUND or minF == LOWER_BOUND or maxH == UPPER_BOUND
             typename SIMD::vector minEF = SIMD::min(minE, minF);
