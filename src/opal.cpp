@@ -1617,12 +1617,14 @@ static void findAlignment(
             }
             break;
         case Cell::Field::E:
-            field = (cell.E == matrix[cIdx - 1][rIdx].H - gapOpen) ? Cell::Field::H : Cell::Field::E;
+            if (cIdx > 0)
+                field = (cell.E == matrix[cIdx - 1][rIdx].H - gapOpen) ? Cell::Field::H : Cell::Field::E;
             alignment[alignmentLength++] = OPAL_ALIGN_INS;
             cIdx--;
             break;
         case Cell::Field::F:
-            field = (cell.F == matrix[cIdx][rIdx - 1].H - gapOpen) ? Cell::Field::H : Cell::Field::F;
+            if (rIdx > 0)
+                field = (cell.F == matrix[cIdx][rIdx - 1].H - gapOpen) ? Cell::Field::H : Cell::Field::F;
             alignment[alignmentLength++] = OPAL_ALIGN_DEL;
             rIdx--;
             break;
