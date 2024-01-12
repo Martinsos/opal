@@ -32,6 +32,7 @@ extern "C" {
 }
 
 const int SIMD_REG_SIZE = 256;
+const int SIMD_ALI_SIZE = SIMD_REG_SIZE / 8;
 
 template<>
 struct Simd<char, MinMax::absolute> {
@@ -116,6 +117,7 @@ extern "C" {
 }
 
 const int SIMD_REG_SIZE = 128;
+const int SIMD_ALI_SIZE = SIMD_REG_SIZE / 8;
 
 template<>
 struct Simd<char, MinMax::absolute> {
@@ -200,6 +202,7 @@ extern "C" {
 }
 
 const int SIMD_REG_SIZE = 128;
+const int SIMD_ALI_SIZE = SIMD_REG_SIZE / 8;
 
 template<>
 struct Simd<char, MinMax::absolute> {
@@ -320,6 +323,7 @@ extern "C" {
 }
 
 const int SIMD_REG_SIZE = 128;
+const int SIMD_ALI_SIZE = SIMD_REG_SIZE / 8;
 
 template<>
 struct Simd<char, MinMax::absolute> {
@@ -424,7 +428,7 @@ static bool loadNextSequence(int &nextDbSeqIdx, int dbLength, int &currDbSeqIdx,
 // For debugging
 template<class SIMD>
 void print_mmxxxi(typename SIMD::vector mm) {
-    typename SIMD::type unpacked[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+    alignas(SIMD_ALI_SIZE) typename SIMD::type unpacked[SIMD::numSeqs];
     SIMD::store(unpacked, mm);
     for (int i = 0; i < SIMD::numSeqs; i++)
         printf("%d ", unpacked[i]);
@@ -507,7 +511,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
     // Profile query -> here we store preprocessed score data needed in core loop.
     // It is recalculated for each column.
-    typename SIMD::vector P[alphabetLength];
+    typename SIMD::vector* P = new typename SIMD::vector[alphabetLength];
 
     // Load initial sequences
     for (int i = 0; i < SIMD::numSeqs; i++) {
@@ -520,10 +524,10 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     typename SIMD::vector Q = SIMD::set1(gapOpen);
     typename SIMD::vector R = SIMD::set1(gapExt);
 
-    int rowsWithImprovement[queryLength];  // Indexes of rows where one of sequences improved score.
+    int* rowsWithImprovement = new int[queryLength];  // Indexes of rows where one of sequences improved score.
 
     // Previous Hs, previous Es, previous F, all signed short.
-    CellEH<SIMD> prevColumn[queryLength];  // Stores results of previous column in matrix.
+    CellEH<SIMD>* prevColumn = new CellEH<SIMD>[queryLength];  // Stores results of previous column in matrix.
     // Initialize all values to 0
     for (int i = 0; i < queryLength; i++) {
         prevColumn[i].H = prevColumn[i].E = scoreZeroes;
@@ -537,7 +541,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
     while (numEndedDbSeqs < dbLength) {
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
-        typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+        alignas(SIMD_ALI_SIZE) typename SIMD::type profileRow[SIMD::numSeqs];
         for (unsigned char letter = 0; letter < alphabetLength; letter++) {
             int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
             for (int i = 0; i < SIMD::numSeqs; i++) {
@@ -612,7 +616,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             currDbSeqsLengths[seqIdx] -= currDbSeqsLengths[seqIdx] > 0;
         }
 
-        typename SIMD::type unpackedMaxH[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+        alignas(SIMD_ALI_SIZE) typename SIMD::type unpackedMaxH[SIMD::numSeqs];
         SIMD::store(unpackedMaxH, maxH);
 
         // ------------------------ OVERFLOW DETECTION -------------------------- //
@@ -621,7 +625,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
             // This check is based on following assumptions:
             //  - overflow wraps
             //  - Q, R and all scores from scoreMatrix are between LOWER_BOUND/2 and UPPER_BOUND/2 exclusive
-            typename SIMD::type unpackedOfTest[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+            alignas(SIMD_ALI_SIZE) typename SIMD::type unpackedOfTest[SIMD::numSeqs];
             SIMD::store(unpackedOfTest, ofTest);
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 overflowed[i] = currDbSeqsPos[i] != 0 && unpackedOfTest[i] <= LOWER_BOUND / 2;
@@ -633,7 +637,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         } else {
             if (SIMD::negRange) {
                 // Since I use saturation, I check if minUlH_P was non negative
-                typename SIMD::type unpackedOfTest[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+                alignas(SIMD_ALI_SIZE) typename SIMD::type unpackedOfTest[SIMD::numSeqs];
                 SIMD::store(unpackedOfTest, ofTest);
                 for (int i = 0; i < SIMD::numSeqs; i++) {
                     overflowed[i] = currDbSeqsPos[i] != 0 && unpackedOfTest[i] >= 0;
@@ -666,7 +670,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         if (searchType != OPAL_SEARCH_SCORE) {
             for (int i = 0; i < rowsWithImprovementLength; i++) {
                 int r = rowsWithImprovement[i];
-                typename SIMD::type unpackedH[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+                alignas(SIMD_ALI_SIZE) typename SIMD::type unpackedH[SIMD::numSeqs];
                 SIMD::store(unpackedH, prevColumn[r].H);
                 for (int j = 0; j < SIMD::numSeqs; j++) {
                     if (currDbSeqsPos[j] != 0 && !overflowed[j]) {  // If not null sequence or overflowedresult->endLocationQuery =
@@ -685,7 +689,7 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
 
         // --------------------- CHECK AND HANDLE SEQUENCE END ------------------ //
         if (overflowDetected || sequenceEnded) { // If at least one sequence ended
-            typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+            alignas(SIMD_ALI_SIZE) typename SIMD::type resetMask[SIMD::numSeqs];
 
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 if (currDbSeqsPos[i] != 0) { // If not null sequence
@@ -744,6 +748,9 @@ static int searchDatabaseSW_(unsigned char query[], int queryLength,
         // ---------------------------------------------------------------------- //
     }
 
+    delete[] prevColumn;
+    delete[] rowsWithImprovement;
+    delete[] P;
     if (overflowOccured) {
         return OPAL_ERR_OVERFLOW;
     }
@@ -890,8 +897,8 @@ static int searchDatabase_(unsigned char query[], int queryLength,
     const typename SIMD::vector R = SIMD::set1(gapExt);
 
     // Previous H column (array), previous E column (array), previous F, all signed short
-    typename SIMD::vector prevHs[queryLength];
-    typename SIMD::vector prevEs[queryLength];
+    typename SIMD::vector* prevHs = new typename SIMD::vector[queryLength];
+    typename SIMD::vector* prevEs = new typename SIMD::vector[queryLength];
     // Initialize all values
     for (int r = 0; r < queryLength; r++) {
         if (MODE == OPAL_MODE_OV)
@@ -919,11 +926,11 @@ static int searchDatabase_(unsigned char query[], int queryLength,
 
     int columnsSinceLastSeqEnd = 0;
     // For each column
-    while (numEndedDbSeqs < dbLength) {
+    typename SIMD::vector* P = new typename SIMD::vector[alphabetLength];
+     while (numEndedDbSeqs < dbLength) {
         // -------------------- CALCULATE QUERY PROFILE ------------------------- //
         // TODO: Rognes uses pshufb here, I don't know how/why?
-        typename SIMD::vector P[alphabetLength];
-        typename SIMD::type profileRow[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+        alignas(SIMD_ALI_SIZE) typename SIMD::type profileRow[SIMD::numSeqs];
         for (unsigned char letter = 0; letter < alphabetLength; letter++) {
             int* scoreMatrixRow = scoreMatrix + letter*alphabetLength;
             for (int i = 0; i < SIMD::numSeqs; i++) {
@@ -941,7 +948,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         // Database sequence has fixed start and end only in NW
         if (MODE == OPAL_MODE_NW) {
             if (seqJustLoaded) {
-                typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+                alignas(SIMD_ALI_SIZE) typename SIMD::type resetMask[SIMD::numSeqs];
                 for (int i = 0; i < SIMD::numSeqs; i++)
                     resetMask[i] = justLoaded[i] ?  0 : -1;
                 const typename SIMD::vector resetMaskPacked = SIMD::load(resetMask);
@@ -1009,7 +1016,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
 
         columnsSinceLastSeqEnd++;
 
-        typename SIMD::type unpackedMaxH[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+        alignas(SIMD_ALI_SIZE) typename SIMD::type unpackedMaxH[SIMD::numSeqs];
         SIMD::store(unpackedMaxH, maxH);
 
         // ------------------------ OVERFLOW DETECTION -------------------------- //
@@ -1020,7 +1027,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
             //  - overflow wraps
             //  - Q, R and all scores from scoreMatrix are between LOWER_BOUND/2 and UPPER_BOUND/2 exclusive
             typename SIMD::vector minEF = SIMD::min(minE, minF);
-            typename SIMD::type unpackedMinEF[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+            alignas(SIMD_ALI_SIZE) typename SIMD::type unpackedMinEF[SIMD::numSeqs];
             SIMD::store(unpackedMinEF, minEF);
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 overflowed[i] = currDbSeqsPos[i] != 0 && unpackedMinEF[i] <= LOWER_BOUND / 2;
@@ -1032,7 +1039,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         } else {
             // There is overflow if minE == LOWER_BOUND or minF == LOWER_BOUND or maxH == UPPER_BOUND
             typename SIMD::vector minEF = SIMD::min(minE, minF);
-            typename SIMD::type unpackedMinEF[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+            alignas(SIMD_ALI_SIZE) typename SIMD::type unpackedMinEF[SIMD::numSeqs];
             SIMD::store(unpackedMinEF, minEF);
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 overflowed[i] = currDbSeqsPos[i] != 0 && (unpackedMinEF[i] == LOWER_BOUND
@@ -1053,7 +1060,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         if (searchType != OPAL_SEARCH_SCORE && (MODE == OPAL_MODE_HW || MODE == OPAL_MODE_OV)) {
             // Determine the column of best score.
             typename SIMD::vector greater = SIMD::cmpgt(maxLastRowH, prevMaxLastRowH);
-            typename SIMD::type unpackedGreater[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+            alignas(SIMD_ALI_SIZE) typename SIMD::type unpackedGreater[SIMD::numSeqs];
             SIMD::store(unpackedGreater, greater);
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 if (currDbSeqsPos[i] != 0 && !overflowed[i]) {  // If not null sequence or overflowed
@@ -1079,7 +1086,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                 bestScore = maxLastRowH;
             if (MODE == OPAL_MODE_NW)
                 bestScore = H;
-            typename SIMD::type unpackedBestScore[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+            alignas(SIMD_ALI_SIZE) typename SIMD::type unpackedBestScore[SIMD::numSeqs];
             SIMD::store(unpackedBestScore, bestScore);
 
             for (int i = 0; i < SIMD::numSeqs; i++) {
@@ -1113,7 +1120,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                                     // This unpacking will repeat unnecessarily if there are multiple sequences
                                     // ending at the same time, however that will happen in very rare occasions.
                                     // TODO(martin): always unpack only once.
-                                    typename SIMD::type unpackedPrevMaxLastRowH[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+                                    alignas(SIMD_ALI_SIZE) typename SIMD::type unpackedPrevMaxLastRowH[SIMD::numSeqs];
                                     SIMD::store(unpackedPrevMaxLastRowH, prevMaxLastRowH);
                                     typename SIMD::type maxScore = unpackedPrevMaxLastRowH[i];
 
@@ -1121,7 +1128,7 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                                     if (unpackedMaxH[i] > maxScore) {
                                         result->endLocationTarget = dbSeqLengths[dbSeqIdx] - 1;
                                         for (int r = 0; r < queryLength; r++) {
-                                            typename SIMD::type unpackedPrevH[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
+                                            alignas(SIMD_ALI_SIZE) typename SIMD::type unpackedPrevH[SIMD::numSeqs];
                                             SIMD::store(unpackedPrevH, prevHs[r]);
                                             if (unpackedPrevH[i] > maxScore) {
                                                 result->endLocationQuery = r;
@@ -1150,8 +1157,8 @@ static int searchDatabase_(unsigned char query[], int queryLength,
                 }
             }
             //------------ Reset prevEs, prevHs, maxLastRowH(, ulH and uH) ------------//
-            typename SIMD::type resetMask[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8)));
-            typename SIMD::type setMask[SIMD::numSeqs] __attribute__((aligned(SIMD_REG_SIZE / 8))); // inverse of resetMask
+            alignas(SIMD_ALI_SIZE) typename SIMD::type resetMask[SIMD::numSeqs];
+            alignas(SIMD_ALI_SIZE) typename SIMD::type setMask[SIMD::numSeqs]; // inverse of resetMask
             for (int i = 0; i < SIMD::numSeqs; i++) {
                 resetMask[i] = justLoaded[i] ?  0 : -1;
                 setMask[i]   = justLoaded[i] ? -1 :  0;
@@ -1201,6 +1208,9 @@ static int searchDatabase_(unsigned char query[], int queryLength,
         // ---------------------------------------------------------------------- //
     }
 
+    delete[] P;
+    delete[] prevHs;
+    delete[] prevEs;
     if (overflowOccured) {
         return OPAL_ERR_OVERFLOW;
     }
