@@ -7,9 +7,17 @@ Opal is implemented mainly by Rognes's "Faster Smith-Waterman database searches 
 Main difference is that Opal offers support for AVX2 and 4 alignment modes instead of just Smith-Waterman.
 
 #### Requirements
-SSE4.1 or higher.
+
+By compiling code with makefile and running ./test, you can see if you have SSE2, SSE4.1, AVX2 or NEON, and also see if everything is working.
+
+##### x86
+
+SSE2 or higher.
 If AVX2 is available, Opal will consume two times more sequences and will therefore work two times faster.
-By compiling code with makefile and running ./test, you can see if you have SSE4.1 or AVX2 and also see if everything is working.
+
+##### Arm
+
+NEON is required to run the SIMD code on Arm. NEON is available on some `armv7` platforms, and on all `Aarch64` platforms.
 
 #### Alignment modes
 Opal offers 4 different modes of alignment: 1 local and 3 global modes, explained below.

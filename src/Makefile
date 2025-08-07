@@ -1,6 +1,6 @@
 CXX = g++
 # -march=native will compile for correct simd
-CXXFLAGS = -std=c++11 -march=native -Wall
+CXXFLAGS = -std=c++11 -march=native -Wall -faligned-new
 
 DEBUG ?= 0
 ifeq ($(DEBUG), 1)
